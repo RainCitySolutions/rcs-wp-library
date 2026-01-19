@@ -28,7 +28,8 @@
 		"phpstan/phpstan" : "~2.1",
 		"phpstan/extension-installer" : "~1.4",
 		"szepeviktor/phpstan-wordpress" : "~2.0",
-		"phpstan/phpstan-mockery" : "~2.0"
+		"phpstan/phpstan-mockery" : "~2.0",
+		"consolidation/robo" : "~5.1"
 	},
 	"autoload" : {
 		"classmap" : [
