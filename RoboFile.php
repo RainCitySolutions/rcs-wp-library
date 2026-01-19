@@ -168,6 +168,7 @@ class RoboFile extends \Robo\Tasks
             ->addDir(self::PROJECT_NAME.'/src', 'src')
             ->addFile(self::PROJECT_NAME.'/composer.json', 'composer.json')
             ->addFile(self::PROJECT_NAME.'/composer.lock', 'composer.lock')
+            ->addFile(self::PROJECT_NAME.'/LISENSE', 'LICENSE')
             ->exclude(['vendor\/.*'])
             ->run();
 
