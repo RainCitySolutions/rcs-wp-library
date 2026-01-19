@@ -1,5 +1,6 @@
 bin export-ignore
 test export-ignore
+test/helpers.php -export-ignore
 phpunit.xml export-ignore
 phpunit-bootstrap.php export-ignore
 version.txt export-ignore
