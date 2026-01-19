@@ -1,0 +1,47 @@
+{
+	"name" : "raincity/rcs-wp-library",
+	"type" : "library",
+	"version" : "1.0.0",
+	"require" : {
+		"php" : ">=8.2",
+		"composer/installers" : "~2.3",
+		"psr/log" : "~3.0",
+		"psr/simple-cache" : "~3.0",
+		"monolog/monolog" : "~3.10",
+		"symfony/cache" : "~7.4",
+		"json-mapper/json-mapper" : "~2.25",
+		"guzzlehttp/guzzle" : "~7.10",
+		"deliciousbrains/wp-background-processing" : "~1.4"
+	},
+	"config" : {
+		"allow-plugins" : {
+			"composer/installers" : true,
+			"phpstan/extension-installer" : true
+		}
+	},
+	"require-dev" : {
+		"phpunit/phpunit" : "~11.5",
+		"brain/monkey" : "~2.6",
+		"mikey179/vfsstream" : "~1.6",
+		"phpstan/phpstan" : "~2.1",
+		"phpstan/extension-installer" : "~1.4",
+		"szepeviktor/phpstan-wordpress" : "~2.0",
+		"phpstan/phpstan-mockery" : "~2.0"
+	},
+	"autoload" : {
+		"classmap" : [
+			"src/"
+		],
+		"psr-4" : {
+			"" : "src"
+		}
+	},
+	"autoload-dev" : {
+		"files" : [
+			"test/helpers.php"
+		],
+		"psr-4" : {
+			"" : "test"
+		}
+	}
+}

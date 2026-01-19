@@ -1,0 +1,18 @@
+{
+	"redefinable-internals" : [
+		"base64_decode",
+        "file_exists",
+        "filemtime",
+        "get_class",
+		"gzdeflate",
+		"gzinflate",
+        "json_decode",
+        "json_encode",
+        "printf",
+        "rename",
+        "sys_get_temp_dir",
+        "tempnam",
+        "touch",
+        "unlink"
+	]
+}
