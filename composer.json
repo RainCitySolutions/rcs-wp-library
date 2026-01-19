@@ -1,7 +1,9 @@
 {
 	"name" : "raincity/rcs-wp-library",
+	"description" : "Library to support implementing WordPress plugins",
 	"type" : "library",
 	"version" : "1.0.0",
+	"license" : "BSD-3-Clause",
 	"require" : {
 		"php" : ">=8.2",
 		"composer/installers" : "~2.3",
@@ -33,9 +35,7 @@
 			"src/"
 		],
 		"psr-4" : {
-			"RCS\\\\" : [
-				"src/RCS"
-			]
+			"RCS\\" : "src/RCS"
 		}
 	},
 	"autoload-dev" : {
@@ -43,9 +43,8 @@
 			"test/helpers.php"
 		],
 		"psr-4" : {
-			"RCS\\\\" : "test/RCS"
+			"RCS\\" : "test/RCS",
+			"Fixtures\\" : "test/Fixtures"
 		}
-	},
-	"description" : "Library to support implementing WordPress plugins",
-	"license" : "BSD-3-Clause"
+	}
 }
