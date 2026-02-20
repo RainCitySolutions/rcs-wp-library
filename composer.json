@@ -2,7 +2,7 @@
 	"name" : "raincity/rcs-wp-library",
 	"description" : "Library to support implementing WordPress plugins",
 	"type" : "library",
-	"version" : "1.0.3",
+	"version" : "1.0.4",
 	"license" : "BSD-3-Clause",
 	"require" : {
 		"php" : ">=8.2",
