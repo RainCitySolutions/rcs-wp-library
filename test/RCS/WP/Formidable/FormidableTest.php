@@ -8,6 +8,9 @@ use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
 use RCS\Util\ReflectionHelper;
 use PHPUnit\Framework\Attributes\UsesClass;
+use Psr\SimpleCache\CacheInterface;
+use PHPUnit\Framework\MockObject\MockObject;
+use RCS\Cache\StringIntBiDiMap;
 
 #[CoversClass(Formidable::class)]
 #[UsesClass(ReflectionHelper::class)]
@@ -27,8 +30,15 @@ class FormidableTest extends TestCase
     private static LegacyMockInterface&MockInterface $mockFrmViewsDisplay;
 
     private static int $testId = 0;
+    private static ?string $testKey = null;
 
     private static \stdClass $testEntry;
+
+    private MockObject $mockCache;
+
+    private MockObject $mockFieldMap;
+    private MockObject $mockFormMap;
+    private MockObject $mockViewMap;
 
     /**
      * Set the identifier to be returned by the mock object
@@ -40,6 +50,10 @@ class FormidableTest extends TestCase
         self::$testId = $id;
     }
 
+    private function setTestKey(?string $key): void
+    {
+        self::$testKey = $key;
+    }
 
     private static function initTestEntry(): void
     {
@@ -73,14 +87,17 @@ class FormidableTest extends TestCase
 
             self::$mockFrmForm = \Mockery::mock('overload:\FrmForm');
             self::$mockFrmForm->shouldReceive('get_id_by_key')->andReturnUsing(fn() => self::$testId);
+            self::$mockFrmForm->shouldReceive('get_key_by_id')->andReturnUsing(fn() => self::$testKey);
 
             self::$mockFrmField = \Mockery::mock('overload:\FrmField');
             self::$mockFrmField->shouldReceive('get_id_by_key')->andReturnUsing(fn() => self::$testId);
+            self::$mockFrmField->shouldReceive('get_key_by_id')->andReturnUsing(fn() => self::$testKey);
             self::$mockFrmField->shouldReceive('getOne')->andReturnUsing(fn() => self::$testEntry);
 
             self::$mockFrmViewsDisplay = \Mockery::mock('overload:\FrmViewsDisplay');
             self::$mockFrmViewsDisplay->shouldReceive('get_id_by_key')->andReturnUsing(fn() => self::$testId);
-//         } else {
+            self::$mockFrmViewsDisplay->shouldReceive('get_key_by_id')->andReturnUsing(fn() => self::$testKey);
+            //         } else {
 //             self::markTestSkipped('Real Formidable classes are available, unable to test');
 //         }
     }
@@ -91,20 +108,21 @@ class FormidableTest extends TestCase
      */
     protected function setUp(): void
     {
-        $this->resetFormidableCache('formIdCache');
-        $this->resetFormidableCache('fieldIdCache');
-        $this->resetFormidableCache('viewIdCache');
-    }
+        $this->mockCache = $this->createMock(CacheInterface::class);
+        $this->mockCache->method('set')->willReturn(true);
 
-    private function resetFormidableCache(string $cacheField): void
-    {
-        ReflectionHelper::setClassProperty(__NAMESPACE__.'\Formidable', $cacheField, []);
-    }
+        $this->mockFieldMap = $this->createMock(StringIntBiDiMap::class);
+        $this->mockFormMap = $this->createMock(StringIntBiDiMap::class);
+        $this->mockViewMap = $this->createMock(StringIntBiDiMap::class);
 
-    private function assertCacheEmpty(string $cacheField): void
-    {
-        self::assertEmpty(
-            ReflectionHelper::getClassProperty(__NAMESPACE__.'\Formidable', $cacheField)
+        ReflectionHelper::setClassProperty(
+            Formidable::class,
+            'maps',
+            [
+                FormidableClassEnum::Field->value => $this->mockFieldMap,
+                FormidableClassEnum::Form->value => $this->mockFormMap,
+                FormidableClassEnum::View->value => $this->mockViewMap
+            ]
             );
     }
 
@@ -114,6 +132,9 @@ class FormidableTest extends TestCase
     public function testGetFormId_missingId (): void
     {
         $this->setTestId(0);
+
+        $this->mockFormMap->expects($this->once())->method('getInt')->with(self::FORM_KEY)->willReturn(null);
+        $this->mockFormMap->expects($this->never())->method('set');
 
         $id = Formidable::getFormId(self::FORM_KEY);
 
@@ -125,7 +146,8 @@ class FormidableTest extends TestCase
         $testId = 27;
         $this->setTestId($testId);
 
-        self::assertCacheEmpty('formIdCache');
+        $this->mockFormMap->expects($this->once())->method('getInt')->with(self::FORM_KEY)->willReturn(null);
+        $this->mockFormMap->expects($this->once())->method('set')->with(self::FORM_KEY, $testId);
 
         $id = Formidable::getFormId(self::FORM_KEY);
 
@@ -137,7 +159,9 @@ class FormidableTest extends TestCase
         $testId = 97;
         $this->setTestId($testId);
 
-        self::assertCacheEmpty('formIdCache');
+        $this->mockFormMap->expects($this->exactly(2))->method('getInt')->with(self::FORM_KEY)->willReturn($testId);
+        $this->mockFormMap->expects($this->never())->method('set');
+
         $id = Formidable::getFormId(self::FORM_KEY);
 
         self::assertEquals(self::$testId, $id);
@@ -148,12 +172,59 @@ class FormidableTest extends TestCase
         self::assertEquals($testId, $id);
     }
 
+    public function testGetFormKey_missingKey (): void
+    {
+        $testId = 23;
+        $this->setTestKey(null);
+
+        $this->mockFormMap->expects($this->once())->method('getString')->with($testId)->willReturn(null);
+        $this->mockFormMap->expects($this->never())->method('set');
+
+        $key = Formidable::getFormKey($testId);
+
+        self::assertNull($key);
+    }
+
+    public function testGetFormKey_notCached (): void
+    {
+        $testId = 63;
+        $this->setTestkey(self::FORM_KEY);
+
+        $this->mockFormMap->expects($this->once())->method('getString')->with($testId)->willReturn(null);
+        $this->mockFormMap->expects($this->once())->method('set')->with(self::FORM_KEY, $testId);
+
+        $key = Formidable::getFormKey($testId);
+
+        self::assertEquals(self::$testKey, $key);
+    }
+
+    public function testGetFormKey_cached (): void
+    {
+        $testId = 98;
+        $this->setTestKey(self::FORM_KEY);
+
+        $this->mockFormMap->expects($this->exactly(2))->method('getString')->with($testId)->willReturn(self::FORM_KEY);
+        $this->mockFormMap->expects($this->never())->method('set');
+
+        $key = Formidable::getFormKey($testId);
+
+        self::assertEquals(self::FORM_KEY, $key);
+
+        $this->setTestKey('InvalidKey');   // Cached id should be returned
+        $key = Formidable::getFormKey($testId);
+
+        self::assertEquals(self::FORM_KEY, $key);
+    }
+
     /************************************************************************
      * FrmField Tests
      ************************************************************************/
     public function testGetFieldId_missingId (): void
     {
         $this->setTestId(0);
+
+        $this->mockFieldMap->expects($this->once())->method('getInt')->with(self::FIELD_KEY)->willReturn(null);
+        $this->mockFieldMap->expects($this->never())->method('set');
 
         $id = Formidable::getFieldId(self::FIELD_KEY);
 
@@ -165,7 +236,9 @@ class FormidableTest extends TestCase
         $testId = 39;
         $this->setTestId($testId);
 
-        self::assertCacheEmpty('fieldIdCache');
+        $this->mockFieldMap->expects($this->once())->method('getInt')->with(self::FIELD_KEY)->willReturn(null);
+        $this->mockFieldMap->expects($this->once())->method('set')->with(self::FIELD_KEY, $testId);
+
         $id = Formidable::getFieldId(self::FIELD_KEY);
 
         self::assertEquals($testId, $id);
@@ -176,7 +249,9 @@ class FormidableTest extends TestCase
         $testId = 79;
         $this->setTestId($testId);
 
-        self::assertCacheEmpty('fieldIdCache');
+        $this->mockFieldMap->expects($this->exactly(2))->method('getInt')->with(self::FIELD_KEY)->willReturn($testId);
+        $this->mockFormMap->expects($this->never())->method('set');
+
         $id = Formidable::getFieldId(self::FIELD_KEY);
 
         self::assertEquals($testId, $id);
@@ -187,12 +262,59 @@ class FormidableTest extends TestCase
         self::assertEquals($testId, $id);
     }
 
+    public function testGetFieldKey_missingKey (): void
+    {
+        $testId = 48;
+        $this->setTestKey(null);
+
+        $this->mockFieldMap->expects($this->once())->method('getString')->with($testId)->willReturn(null);
+        $this->mockFieldMap->expects($this->never())->method('set');
+
+        $key = Formidable::getFieldKey($testId);
+
+        self::assertNull($key);
+    }
+
+    public function testGetFieldKey_notCached (): void
+    {
+        $testId = 39;
+        $this->setTestKey(self::FIELD_KEY);
+
+        $this->mockFieldMap->expects($this->once())->method('getString')->with($testId)->willReturn(null);
+        $this->mockFieldMap->expects($this->once())->method('set')->with(self::FIELD_KEY, $testId);
+
+        $key = Formidable::getFieldKey($testId);
+
+        self::assertEquals(self::$testKey, $key);
+    }
+
+    public function testGetFieldKeyId_cached (): void
+    {
+        $testId = 71;
+        $this->setTestKey(self::FIELD_KEY);
+
+        $this->mockFieldMap->expects($this->exactly(2))->method('getString')->with($testId)->willReturn(self::FIELD_KEY);
+        $this->mockFormMap->expects($this->never())->method('set');
+
+        $key = Formidable::getFieldKey($testId);
+
+        self::assertEquals(self::FIELD_KEY, $key);
+
+        $this->setTestKey('DifferentKey');   // Cached id should be returned
+        $key = Formidable::getFieldKey($testId);
+
+        self::assertEquals(self::FIELD_KEY, $key);
+    }
+
     /************************************************************************
      * FrmView Tests
      ************************************************************************/
     public function testGetViewId_missingId (): void
     {
         $this->setTestId(0);
+
+        $this->mockViewMap->expects($this->once())->method('getInt')->with(self::VIEW_KEY)->willReturn(null);
+        $this->mockViewMap->expects($this->never())->method('set');
 
         $id = Formidable::getViewId(self::VIEW_KEY);
 
@@ -204,7 +326,9 @@ class FormidableTest extends TestCase
         $testId = 72;
         $this->setTestId($testId);
 
-        self::assertCacheEmpty('viewIdCache');
+        $this->mockViewMap->expects($this->once())->method('getInt')->with(self::VIEW_KEY)->willReturn(null);
+        $this->mockViewMap->expects($this->once())->method('set')->with(self::VIEW_KEY, $testId);
+
         $id = Formidable::getViewId(self::VIEW_KEY);
 
         self::assertEquals(self::$testId, $id);
@@ -215,7 +339,9 @@ class FormidableTest extends TestCase
         $testId = 82;
         $this->setTestId($testId);
 
-        self::assertCacheEmpty('viewIdCache');
+        $this->mockViewMap->expects($this->exactly(2))->method('getInt')->with(self::VIEW_KEY)->willReturn($testId);
+        $this->mockViewMap->expects($this->never())->method('set');
+
         $id = Formidable::getViewId(self::VIEW_KEY);
 
         self::assertEquals($testId, $id);
@@ -226,6 +352,50 @@ class FormidableTest extends TestCase
         self::assertEquals($testId, $id);
     }
 
+    public function testGetViewKey_missingKey (): void
+    {
+        $testId = 48;
+        $this->setTestKey(null);
+
+        $this->mockViewMap->expects($this->once())->method('getString')->with($testId)->willReturn(null);
+        $this->mockViewMap->expects($this->never())->method('set');
+
+        $key = Formidable::getViewKey($testId);
+
+        self::assertNull($key);
+    }
+
+    public function testGetViewKey_notCached (): void
+    {
+        $testId = 72;
+        $this->setTestKey(self::VIEW_KEY);
+
+        $this->mockViewMap->expects($this->once())->method('getString')->with($testId)->willReturn(null);
+        $this->mockViewMap->expects($this->once())->method('set')->with(self::VIEW_KEY, $testId);
+
+        $key = Formidable::getViewKey($testId);
+
+        self::assertEquals(self::$testKey, $key);
+    }
+
+    public function testGetViewKey_cached (): void
+    {
+        $testId = 85;
+        $this->setTestKey(self::VIEW_KEY);
+
+        $this->mockViewMap->expects($this->exactly(2))->method('getString')->with($testId)->willReturn(self::$testKey);
+        $this->mockViewMap->expects($this->never())->method('set');
+
+        $key = Formidable::getViewKey($testId);
+
+        self::assertEquals(self::VIEW_KEY, $key);
+
+        $this->setTestKey('AnotherKey');   // Cached id should be returned
+        $key = Formidable::getViewKey($testId);
+
+        self::assertEquals(self::VIEW_KEY, $key);
+    }
+
     public function testGetAllId_unique (): void
     {
         $key = 'SameKey';
@@ -234,9 +404,13 @@ class FormidableTest extends TestCase
         $testFieldId = 88;
         $testViewId = 99;
 
-        self::assertCacheEmpty('formIdCache');
-        self::assertCacheEmpty('fieldIdCache');
-        self::assertCacheEmpty('viewIdCache');
+        $this->mockFieldMap->method('getInt')->willReturnOnConsecutiveCalls(null, $testFieldId);
+        $this->mockFormMap->method('getInt')->willReturnOnConsecutiveCalls(null, $testFormId);
+        $this->mockViewMap->method('getInt')->willReturnOnConsecutiveCalls(null, $testViewId);
+
+        $this->mockFieldMap->expects($this->once())->method('set')->with($key, $testFieldId);
+        $this->mockFormMap->expects($this->once())->method('set')->with($key, $testFormId);
+        $this->mockViewMap->expects($this->once())->method('set')->with($key, $testViewId);
 
         $this->setTestId($testFormId);
         $formId = Formidable::getFormId($key);
