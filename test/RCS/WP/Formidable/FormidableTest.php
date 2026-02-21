@@ -102,7 +102,7 @@ class FormidableTest extends TestCase
 
         $id = Formidable::getFormId(self::FORM_KEY);
 
-        self::assertEquals(0, $id);
+        self::assertNull($id);
     }
 
     public function testGetFormId_notCached (): void
@@ -144,7 +144,7 @@ class FormidableTest extends TestCase
 
         $id = Formidable::getFieldId(self::FIELD_KEY);
 
-        self::assertEquals(0, $id);
+        self::assertNull($id);
     }
 
     public function testGetFieldId_notCached (): void
@@ -186,7 +186,7 @@ class FormidableTest extends TestCase
 
         $id = Formidable::getViewId(self::VIEW_KEY);
 
-        self::assertEquals(0, $id);
+        self::assertNull($id);
     }
 
     public function testGetViewId_notCached (): void

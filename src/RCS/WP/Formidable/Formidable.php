@@ -18,12 +18,12 @@ class Formidable
      *
      * @param string $key The key of a Formidable form.
      *
-     * @return int The ID of the form or 0 if no form was found with
+     * @return int|null The ID of the form or null if no form was found with
      *         the specified key.
      */
-    public static function getFormId(string $key): int
+    public static function getFormId(string $key): ?int
     {
-        return \FrmForm::get_id_by_key($key);
+        return \FrmForm::get_id_by_key($key) ?: null;
     }
 
 
@@ -46,12 +46,12 @@ class Formidable
      *
      * @param string $key The key of a Formidable field.
      *
-     * @return int The ID of the field or 0 if no field was found
+     * @return int|null The ID of the field or null if no field was found
      *         with the specified key.
      */
-    public static function getFieldId(string $key): int
+    public static function getFieldId(string $key): ?int
     {
-        return \FrmField::get_id_by_key($key);
+        return \FrmField::get_id_by_key($key) ?: null;
     }
 
     /**
@@ -73,12 +73,12 @@ class Formidable
      *
      * @param string $key The key of a Formidable view.
      *
-     * @return int The ID of the view or 0 if no view was found with
+     * @return int|null The ID of the view or 0 if no view was found with
      *         the specified key.
      */
-    public static function getViewId(string $key): int
+    public static function getViewId(string $key): ?int
     {
-        return \FrmViewsDisplay::get_id_by_key($key);
+        return \FrmViewsDisplay::get_id_by_key($key) ?: null;
     }
 
 
