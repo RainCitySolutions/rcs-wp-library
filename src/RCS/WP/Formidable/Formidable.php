@@ -2,62 +2,28 @@
 declare(strict_types=1);
 namespace RCS\WP\Formidable;
 
-use Psr\SimpleCache\CacheInterface;
-use RCS\Cache\DataCache;
-use RCS\Cache\StringIntBiDiMap;
-
 /**
- * A convienence class for looking up cached key/id pairs and other things
- * related to Formidable Forms tables.
+ * A convienence class for looking up key/id pairs and other things related
+ * to Formidable Forms tables.
  */
 class Formidable
 {
     private const FRM_CACHE_FLAG = 'prevent_caching';
 
-    private static CacheInterface $cache;
-
-    /** @var StringIntBiDiMap[] */
-    private static array $maps = [];
-
     /** @var int[] */
     private static array $dbCacheState = [];
-
-    private static function getCache(): CacheInterface
-    {
-        if (!isset(self::$cache)) {
-            self::$cache = DataCache::instance();
-        }
-
-        return self::$cache;
-    }
-
-    /**
-     * Fetch the map object for the associated enum.
-     *
-     * @param FormidableClassEnum $mapKey
-     *
-     * @return StringIntBiDiMap
-     */
-    private static function getMap(FormidableClassEnum $mapKey): StringIntBiDiMap
-    {
-        if (!isset(self::$maps[$mapKey->value])) {
-            self::$maps[$mapKey->value] = new StringIntBiDiMap(self::getCache(), $mapKey->value);
-        }
-
-        return self::$maps[$mapKey->value];
-    }
 
     /**
      * Returns the ID for a Formidable form given its key.
      *
      * @param string $key The key of a Formidable form.
      *
-     * @return int|NULL The ID of the form or null if no form was found with
+     * @return int The ID of the form or 0 if no form was found with
      *         the specified key.
      */
-    public static function getFormId(string $key): ?int
+    public static function getFormId(string $key): int
     {
-        return self::getId($key, FormidableClassEnum::Form);
+        return \FrmForm::get_id_by_key($key);
     }
 
 
@@ -71,7 +37,7 @@ class Formidable
      */
     public static function getFormKey(int $id): ?string
     {
-        return self::getKey($id, FormidableClassEnum::Form);
+        return \FrmForm::get_key_by_id($id);
     }
 
 
@@ -80,12 +46,12 @@ class Formidable
      *
      * @param string $key The key of a Formidable field.
      *
-     * @return int|NULL The ID of the field or null if no field was found
+     * @return int The ID of the field or 0 if no field was found
      *         with the specified key.
      */
-    public static function getFieldId(string $key): ?int
+    public static function getFieldId(string $key): int
     {
-        return self::getId($key, FormidableClassEnum::Field);
+        return \FrmField::get_id_by_key($key);
     }
 
     /**
@@ -98,7 +64,7 @@ class Formidable
      */
     public static function getFieldKey(int $id): ?string
     {
-        return self::getKey($id, FormidableClassEnum::Field);
+        return \FrmField::get_key_by_id($id);
     }
 
 
@@ -107,12 +73,12 @@ class Formidable
      *
      * @param string $key The key of a Formidable view.
      *
-     * @return int|NULL The ID of the view or null if no view was found with
+     * @return int The ID of the view or 0 if no view was found with
      *         the specified key.
      */
-    public static function getViewId(string $key): ?int
+    public static function getViewId(string $key): int
     {
-        return self::getId($key, FormidableClassEnum::View);
+        return \FrmViewsDisplay::get_id_by_key($key);
     }
 
 
@@ -126,76 +92,7 @@ class Formidable
      */
     public static function getViewKey(int $id): ?string
     {
-        return self::getKey($id, FormidableClassEnum::View);
-    }
-
-
-    /**
-     * Returns the ID for a Formidable class entry given its key.
-     *
-     * @param string $key The key of a Formidable entry.
-     * @param FormidableClassEnum $mapKey The map key for caching key/id mappings.
-     *
-     * @return int|NULL The ID of the entry or null if no entry was found
-     *         with the specified key.
-     */
-    private static function getId(string $key, FormidableClassEnum $mapKey): ?int
-    {
-        $id = null;
-
-        $classname = '\\' . $mapKey->value;
-
-        // If the class we need is available, continue
-        if (class_exists($classname)) {
-            $map = self::getMap($mapKey);
-
-            $id = $map->getInt($key);
-
-            if (is_null($id)) {
-                $dbId = intval($classname::get_id_by_key($key));
-
-                if (0 !== $dbId) {
-                    $map->set($key, $dbId);
-                    $id = $dbId;
-                }
-            }
-        }
-
-        return $id;
-    }
-
-    /**
-     * Returns the KEY for a Formidable class entry given its it.
-     *
-     * @param int $id The id of a Formidable entry.
-     * @param FormidableClassEnum $mapKey The map key for caching key/id mappings.
-     *
-     * @return string|NULL The Key of the entry or null if no entry was found
-     *         with the specified key.
-     */
-    private static function getKey(int $id, FormidableClassEnum $mapKey): ?string
-    {
-        $key = null;
-
-        $classname = '\\' . $mapKey->value;
-
-        // If the class we need is available, continue
-        if (class_exists($classname)) {
-            $map = self::getMap($mapKey);
-
-            $key = $map->getString($id);
-
-            if (is_null($key)) {
-                $dbKey = $classname::get_key_by_id($id);
-
-                if (null !== $dbKey) {
-                    $map->set($dbKey, $id);
-                    $key = $dbKey;
-                }
-            }
-        }
-
-        return $key;
+        return \FrmViewsDisplay::get_key_by_id($id);
     }
 
     /**
