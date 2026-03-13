@@ -2,6 +2,7 @@
 declare(strict_types = 1);
 namespace RCS\Util;
 
+use Geocoder\Location;
 use Geocoder\Provider\Provider;
 use Geocoder\Provider\GoogleMaps\GoogleMaps;
 use Geocoder\Query\GeocodeQuery;
@@ -27,6 +28,73 @@ class GeocodeHelper
         private ?LoggerInterface $logger = null
         )
     {
+    }
+
+    /**
+     * Determine if a postal code is valid for a set of countries.
+     *
+     * @param string $postalCode The postal code to test.
+     * @param string[] $countries An array of ISO-3166-1, two letter country
+     *      codes. E.g. US or CA.
+     *
+     * @return bool True if the postal code is valid for one of the provided
+     *      country codes. False if the postal code is not valid for any of
+     *      the countries, or an error occured trying to determine the postal
+     *      code validity.
+     */
+    public function isValidPostalCode(string $postalCode, array $countries): bool
+    {
+        $result = false;
+
+        $geoLocation = $this->fetchLocation($postalCode);
+
+        if ($geoLocation) {
+            $country = $geoLocation->getCountry();
+
+            if ($country &&
+                in_array($country->getCode(), $countries))
+            {
+                $result = true;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Determine if the zip or postal code provided is valid in the United
+     * States or Cananda.
+     *
+     * @param string $zipcode The zip or postal code to validate.
+     *
+     * @return bool True if the postal code is valid in either the United
+     *      States or Canada. False if the postal code is not valid either
+     *      country , or an error occured trying to determine the postal
+     *      code validity.
+     */
+    public function isValidUsOrCaZipcode(string $zipcode): bool
+    {
+        return $this->isValidPostalCode($zipcode, ['US', 'CA']);
+    }
+
+
+    /**
+     *
+     * @param string $location
+     *
+     * @return GeocodeLocation|NULL
+     */
+    public function lookupGeoLocation(string $location): ?GeocodeLocation
+    {
+        $result = null;
+
+        $geoLocation = $this->fetchLocation($location);
+
+        if ($geoLocation) {
+            $result = $this->constructGeocodeLocation($geoLocation);
+        }
+
+        return $result;
     }
 
     /**
@@ -58,62 +126,52 @@ class GeocodeHelper
         return $this->geocodeProvider;
     }
 
+
     /**
-     * Determine if a postal code is valid for a set of countries.
      *
-     * @param string $postalCode The postal code to test.
-     * @param string[] $countries An array of ISO-3166-1, two letter country
-     *      codes. E.g. US or CA.
+     * @param string $location
      *
-     * @return bool True if the postal code is valid for one of the provided
-     *      country codes. False if the postal code is not valid for any of
-     *      the countries, or an error occured trying to determine the postal
-     *      code validity.
+     * @return Location|NULL
      */
-    public function isValidPostalCode(string $postalCode, array $countries): bool
+    private function fetchLocation(string $location): ?Location
     {
-        $result = false;
+        $result = null;
 
         try {
             $geocoder = $this->getGeocodeProvider();
 
             if ($geocoder) {
-                $queryResult = $geocoder->geocodeQuery(GeocodeQuery::create($postalCode));
+                $queryResult = $geocoder->geocodeQuery(GeocodeQuery::create($location));
 
                 if (!$queryResult->isEmpty()) {
-                    $location = $queryResult->first();
-
-                    $country = $location->getCountry();
-
-                    if ($country &&
-                        in_array($country->getCode(), $countries))
-                    {
-                        $result = true;
-                    }
+                    $result = $queryResult->first();
                 }
             }
         } catch (\Exception $e) {
-            if ($this->logger) {
-                $this->logger->critical('Error fetching Geocode information for ' . $postalCode . ': ' . $e->getMessage());
-            }
+            $this->logger->critical('Error fetching Geocode information for ' . $location . ': ' . $e->getMessage());
         }
 
         return $result;
     }
 
-    /**
-     * Determine if the zip or postal code provided is valid in the United
-     * States or Cananda.
-     *
-     * @param string $zipcode The zip or postal code to validate.
-     *
-     * @return bool True if the postal code is valid in either the United
-     *      States or Canada. False if the postal code is not valid either
-     *      country , or an error occured trying to determine the postal
-     *      code validity.
-     */
-    public function isValidUsOrCaZipcode(string $zipcode): bool
+
+    private function constructGeocodeLocation(Location $location): GeocodeLocation
     {
-        return $this->isValidPostalCode($zipcode, ['US', 'CA']);
+        $adminLevel = $location->getAdminLevels()->get(1);
+
+        $result = new GeocodeLocation();
+        $result
+            ->setAddressLine1(($location->getStreetNumber() ?? '') . ' ' . ($location->getStreetName() ?? ''))
+            ->setCity($location->getLocality() ?? '')
+            ->setState($adminLevel->getName())
+            ->setStateAbbreviation($adminLevel->getCode() ?? '')
+            ->setZipcode($location->getPostalCode() ?? '')
+            ->setCountryCode($location->getCountry()?->getCode() ?? '')
+            ->setCountry($location->getCountry()?->getName() ?? '')
+            ->setLatitude($location->getCoordinates()?->getLatitude() ?? '')
+            ->setLongitude($location->getCoordinates()?->getLongitude() ?? '')
+            ;
+
+            return $result;
     }
 }
