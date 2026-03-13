@@ -13,12 +13,14 @@
 		"symfony/cache" : "~7.4",
 		"json-mapper/json-mapper" : "~2.25",
 		"guzzlehttp/guzzle" : "~7.10",
-		"deliciousbrains/wp-background-processing" : "~1.4"
+		"deliciousbrains/wp-background-processing" : "~1.4",
+		"geocoder-php/google-maps-provider" : "~4.8"
 	},
 	"config" : {
 		"allow-plugins" : {
-			"composer/installers" : true,
-			"phpstan/extension-installer" : true
+			"composer/installers": true,
+			"phpstan/extension-installer": true,
+			"php-http/discovery": true
 		}
 	},
 	"require-dev" : {
