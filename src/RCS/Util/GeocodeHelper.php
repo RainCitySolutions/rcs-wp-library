@@ -4,9 +4,7 @@ namespace RCS\Util;
 
 use Geocoder\Location;
 use Geocoder\Provider\Provider;
-use Geocoder\Provider\GoogleMaps\GoogleMaps;
 use Geocoder\Query\GeocodeQuery;
-use GuzzleHttp\Client;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -14,17 +12,14 @@ use Psr\Log\LoggerInterface;
  */
 class GeocodeHelper
 {
-    private ?Provider $geocodeProvider = null;
-
     /**
      *
-     * @param string $apiKey The Google Maps API key to use in accessing the
-     *      Geocode API.
+     * @param Provider $geocodeProvider An implementation of Provider.
      * @param LoggerInterface $logger Optional. If provided, will be used for
      *      logging any errors that occur.
      */
     public function __construct(
-        private string $apiKey,
+        private Provider $geocodeProvider,
         private ?LoggerInterface $logger = null
         )
     {
@@ -98,36 +93,6 @@ class GeocodeHelper
     }
 
     /**
-     * Fetch Geocode Provider.
-     *
-     * This function allows the creating of the HTTP client once during a
-     * request for use multiple times.
-     *
-     * @return Provider|null
-     */
-    private function getGeocodeProvider(): ?Provider
-    {
-        if (!$this->geocodeProvider) {
-            $config = [
-                'timeout' => 2.0,
-                'verify' => false
-            ];
-
-            try {
-                $client = new Client($config);
-                $this->geocodeProvider = new GoogleMaps($client, null, $this->apiKey);
-            } catch (\Exception $e) {
-                if ($this->logger) {
-                    $this->logger->critical('Unable to create Geocode Provider: ' . $e->getMessage());
-                }
-            }
-        }
-
-        return $this->geocodeProvider;
-    }
-
-
-    /**
      *
      * @param string $location
      *
@@ -138,14 +103,10 @@ class GeocodeHelper
         $result = null;
 
         try {
-            $geocoder = $this->getGeocodeProvider();
+            $queryResult = $this->geocodeProvider->geocodeQuery(GeocodeQuery::create($location));
 
-            if ($geocoder) {
-                $queryResult = $geocoder->geocodeQuery(GeocodeQuery::create($location));
-
-                if (!$queryResult->isEmpty()) {
-                    $result = $queryResult->first();
-                }
+            if (!$queryResult->isEmpty()) {
+                $result = $queryResult->first();
             }
         } catch (\Exception $e) {
             $this->logger->critical('Error fetching Geocode information for ' . $location . ': ' . $e->getMessage());
