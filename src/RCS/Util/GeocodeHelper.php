@@ -168,8 +168,8 @@ class GeocodeHelper
             ->setZipcode($location->getPostalCode() ?? '')
             ->setCountryCode($location->getCountry()?->getCode() ?? '')
             ->setCountry($location->getCountry()?->getName() ?? '')
-            ->setLatitude($location->getCoordinates()?->getLatitude() ?? '')
-            ->setLongitude($location->getCoordinates()?->getLongitude() ?? '')
+            ->setLatitude($location->getCoordinates()?->getLatitude() ?? 0.0)
+            ->setLongitude($location->getCoordinates()?->getLongitude() ?? 0.0)
             ;
 
             return $result;
