@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\CoversMethod;
 #[CoversClass(\RCS\Csv\CsvBindByNameAltsTestClass::class)]
 #[CoversMethod(\RCS\Csv\CsvBindByName::class, '__construct')]
 #[CoversMethod(\RCS\Csv\CsvBindByName::class, 'getColumns')]
+#[CoversMethod(\RCS\Csv\CsvBindByName::class, 'getOrder')]
 class CsvBindByNameTraitTest extends TestCase
 {
     private const COLUMN_IDENTITY = 'Identity';
@@ -182,25 +183,52 @@ class CsvBindByNameTraitTest extends TestCase
         self::assertEquals($this->testNamesObj->id, $map[self::COLUMN_NAMES_IDENTITY]);
         self::assertEquals($this->testNamesObj->id, $map[self::COLUMN_NAMES_MEMBERSHIP]);
     }
+
+    public function testOrder_baseClass(): void
+    {
+        $names = CsvBindByNameTraitTestClass::getColumnNames();
+
+        self::assertNotEmpty($names);
+        self::assertCount(3, $names);
+
+        self::assertEquals(self::COLUMN_DATEOFBIRTH, array_shift($names));
+        self::assertEquals(self::COLUMN_FULLNAME, array_shift($names));
+        self::assertEquals(self::COLUMN_IDENTITY, array_shift($names));
+    }
+
+    public function testOrder_subClass(): void
+    {
+        $names = CsvBindByNameSubClass::getColumnNames();
+
+        self::assertNotEmpty($names);
+        self::assertCount(4, $names);
+
+        self::assertEquals(self::COLUMN_DATEOFBIRTH, array_shift($names));
+        self::assertEquals(self::COLUMN_SUBCLASSPROP, array_shift($names));
+        self::assertEquals(self::COLUMN_FULLNAME, array_shift($names));
+        self::assertEquals(self::COLUMN_IDENTITY, array_shift($names));
+    }
 }
 
 class CsvBindByNameTraitTestClass
 {
     use CsvBindByNameTrait;
 
-    #[CsvBindByName(column: 'Identity', outputFormat: '%d')]
+    #[CsvBindByName(column: 'Identity', outputFormat: '%d', order: 5)]
     public int $id;
 
-    #[CsvBindByName(column: 'Full Name', outputFormat: '%s')]
+    #[CsvBindByName(column: 'Full Name', outputFormat: '%s', order: 3)]
     public string $fullname;
 
-    #[CsvBindByName(column: 'DOB', outputFormat: '%s')]
+    #[CsvBindByName(column: 'DOB', outputFormat: '%s', order: 1)]
     public \DateTime $dateOfBirth;
+
+    public string $nonCsvProperty;
 }
 
 class CsvBindByNameSubClass extends CsvBindByNameTraitTestClass
 {
-    #[CsvBindByName(column: 'Sub Class Prop')]
+    #[CsvBindByName(column: 'Sub Class Prop', order: 2)]
     public string $subClassProp;
 }
 

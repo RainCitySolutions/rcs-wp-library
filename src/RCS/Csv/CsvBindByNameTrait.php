@@ -2,9 +2,7 @@
 declare(strict_types = 1);
 namespace RCS\Csv;
 
-use DateTimeInterface;
 use ReflectionProperty;
-use RCS\Util\ReflectionHelper;
 
 /**
  * A Trait work in conjuction with CsvBindByName annotation.
@@ -96,6 +94,8 @@ trait CsvBindByNameTrait
         /** @var ReflectionProperty[] */
         $properties = $reflectionClass->getProperties();
 
+        $properties = self::filterAndSort($properties);
+
         foreach ($properties as $property) {
             $attrs = $property->getAttributes(CsvBindByName::class);
 
@@ -107,5 +107,34 @@ trait CsvBindByNameTrait
                     );
             }
         }
+    }
+
+    /**
+     * Filters a set of properties down to those with a CsvBindByName
+     * attribute and sorts them by the desired order.
+     *
+     * @param ReflectionProperty[] $properties
+     *
+     * @return ReflectionProperty[]
+     */
+    private static function filterAndSort(array $properties): array
+    {
+        $filteredProps = array_filter(
+            $properties,
+            function(ReflectionProperty $property): bool {
+                $attrs = $property->getAttributes(CsvBindByName::class);
+
+                return !empty($attrs);
+            }
+        );
+
+        usort($filteredProps, function(ReflectionProperty $a, ReflectionProperty $b) {
+            $orderA = $a->getAttributes(CsvBindByName::class)[0]->newInstance()->getOrder();
+            $orderB = $b->getAttributes(CsvBindByName::class)[0]->newInstance()->getOrder();
+
+            return $orderA <=> $orderB;
+        });
+
+        return $filteredProps;
     }
 }

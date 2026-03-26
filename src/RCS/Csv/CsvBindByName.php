@@ -33,10 +33,23 @@ class CsvBindByName
     private string $outputFormat;
 
     /**
+     * Used to indicate a desired order in which the column would be written.
      *
-     * @param string|string[] $column
+     * @Optional
+     * @var int
      */
-    public function __construct(string|array $column, string $outputFormat = "%s")
+    private int $order;
+
+    /**
+     *
+     * @param string|string[] $column The column name or names associated
+     *      with property or methd.
+     * @param string $outputFormat (Optional) The output format used to be
+     *      used in formatting the column when output.
+     * @param int $order A desired order in which the column should be
+     *      written.
+     */
+    public function __construct(string|array $column, string $outputFormat = "%s", int $order = PHP_INT_MAX)
     {
         if (empty($column)) {
             throw new \InvalidArgumentException(self::INVALID_ARG_MSG);
@@ -52,6 +65,7 @@ class CsvBindByName
 
         $this->columns = array_map(fn(string $entry) => trim($entry), $column);
         $this->outputFormat = $outputFormat;
+        $this->order = $order;
     }
 
     /**
@@ -66,5 +80,10 @@ class CsvBindByName
     public function getOutputFormat(): string
     {
         return $this->outputFormat;
+    }
+
+    public function getOrder(): int
+    {
+        return $this->order;
     }
 }
