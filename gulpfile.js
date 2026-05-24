@@ -72,7 +72,7 @@ function updateComposerJsonVersion() {
 }
 
 function runComposerTask(cb) {
-    return exec('composer install --no-dev --optimize-autoloader', (err, stdout, stderr) => {
+    return exec('composer update --no-dev --optimize-autoloader', (err, stdout, stderr) => {
         console.log(stdout);
         console.error(stderr);
         cb(err);
