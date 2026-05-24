@@ -98,7 +98,9 @@ class Timer implements TimerInterface
     public function lap($key = ''): void
     {
         $key = ($key === '') ? 'Lap' : $key;
-        if (isset($this->start)) {
+
+        // Don't reset lap if we haven't started
+        if (0.0 !== $this->start) {
             $this->stop();
             $this->lapTotalTime += ($this->stop - $this->start);
             $this->laps[$key . ' ' . $this->count] = $this->getLapTime();
