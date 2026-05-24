@@ -19,9 +19,10 @@ jobs:
 
       # Setup NodeJS environment
       - name: Setup Node.js environment
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "22.12.0"
+          node-version: 22
+          cache: 'npm'
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -29,15 +30,6 @@ jobs:
             php-version: 8.2
             extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, mysql, mysqli, pdo_mysql, bcmath, soap, intl, gd, exif, iconv, imagick
             coverage: xdebug
-
-      # cache the dependencies to speed up the build
-      - name: Cache NPM dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
 
       # Validate the Composer files
       - name: Validate composer.json and composer.lock
