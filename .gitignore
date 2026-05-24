@@ -1,6 +1,7 @@
+.phpunit.cache/
 .settings/
 build/
 report/
 vendor/
+node_modules/
 coverage.db
-.phpunit.cache/
