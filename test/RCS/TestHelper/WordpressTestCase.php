@@ -213,8 +213,3 @@ abstract class WordpressTestCase extends RainCityTestCase
         $this->plugins[$pluginFile] = $pluginInfo;
     }
 }
-
-class WordPressRestServerStub   // A test stub of WP_REST_Server
-{
-    const READABLE = 'GET';
-}
