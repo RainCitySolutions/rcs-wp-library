@@ -3,13 +3,10 @@ declare(strict_types=1);
 namespace RCS\Logging;
 
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
-use RCS\Util\ReflectionHelper;
 
 #[CoversClass(MethodLogger::class)]
-#[UsesClass(\RCS\Util\ReflectionHelper::class)]
 final class MethodLoggerTest extends TestCase
 {
     private const ENTERING = 'Entering ';

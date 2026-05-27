@@ -8,9 +8,15 @@ class MethodLogger
 {
     private string $method;
 
+    /**
+     * The $timer parameter is present primary for testing.
+     *
+     * @param LoggerInterface $logger
+     * @param TimerInterface $timer
+     */
     public function __construct(
-        private LoggerInterface $logger,
-        private TimerInterface $timer
+        private readonly LoggerInterface $logger,
+        private readonly TimerInterface $timer = new Timer()
         )
     {
         $this->method = $this->getCallingMethodName();
