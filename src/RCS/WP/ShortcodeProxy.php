@@ -12,8 +12,8 @@ use Psr\Log\LoggerInterface;
  * This class acts as a proxy for classes implementing shortcodes,
  * specifically those implementing the ShortcodeImplInf. The class will only
  * instantiate the class for a shortcode implemention when there is a
- * request to render that shortcode. This is done with the aid of a
- * Dependency Injection framework such as PHP-DI.
+ * request to render or handle an AJAX request for that shortcode. This is
+ * done with the aid of a Dependency Injection framework such as PHP-DI.
  */
 class ShortcodeProxy
 {
@@ -90,6 +90,42 @@ class ShortcodeProxy
         return $html;
     }
 
+    public function handleAjaxRequest(): void
+    {
+        $matches = [];
+
+        if (preg_match('/(wp_ajax_nopriv_|wp_ajax_)(.*)/', current_action(), $matches)) {
+            $isprivate = 'wp_ajax_nopriv_' == $matches[1];
+            $shortcodeTag = $matches[2];
+
+            // Verify the shortcode is in our map
+            if (array_key_exists($shortcodeTag, $this->shortcodeMap)) {
+                try {
+                    // Get an instance of the shortcode class from the DI framework
+                    /** @var ShortcodeImplInf */
+                    $obj = $this->diContainer->get($this->shortcodeMap[$shortcodeTag]);
+
+                    if ($isprivate) {
+                        $obj->handlePrivateAjaxRequest();
+                    } else {
+                        $obj->handlePublicAjaxRequest();
+                    }
+                }
+                catch (NotFoundExceptionInterface | ContainerExceptionInterface $e) {
+                    $this->logger->error(
+                        'Unable to retrieve class instance for shortcode {sc}: {err}',
+                        [
+                            'sc' => $shortcodeTag,
+                            'err' => $e->getMessage()
+                        ]
+                        );
+                }
+            }
+        }
+
+        wp_die();
+    }
+
     /**
      * Adds a shortcode class to the proxy.
      *
@@ -112,6 +148,9 @@ class ShortcodeProxy
 
             // add the shortcode to WordPress with our handler
             add_shortcode($tag, [$this, 'renderShortcode']);
+
+            add_action('wp_ajax_nopriv_'.$tag, [$this, 'handleAjaxRequest']);
+            add_action('wp_ajax_'.$tag, [$this, 'handleAjaxRequest']);
         }
     }
 

@@ -30,6 +30,29 @@ trait ShortcodeImplTrait
     }
 
     /**
+     * Handled a public AJAX request.
+     *
+     * Implementations should not call wp_die() at the end. This is handled
+     * internally.
+     */
+    public function handlePublicAjaxRequest(): void
+    {
+        // By default, do nothing
+    }
+
+    /**
+     * Handled a private AJAX request.
+     *
+     * Implementations should not call wp_die() at the end. This is handled
+     * internally.
+     */
+    public function handlePrivateAjaxRequest(): void
+    {
+        // By default, do nothing
+    }
+
+
+    /**
      *
      * @param ShortcodeDocumentation[] $documentation
      *

@@ -31,6 +31,22 @@ interface ShortcodeImplInf
     public function renderShortcode(array $attrs = [], ?string $content = null): string;
 
     /**
+     * Handled a public AJAX request.
+     *
+     * Implementations should not call wp_die() at the end. This is handled
+     * internally.
+     */
+    public function handlePublicAjaxRequest(): void;
+
+    /**
+     * Handled a private AJAX request.
+     *
+     * Implementations should not call wp_die() at the end. This is handled
+     * internally.
+     */
+    public function handlePrivateAjaxRequest(): void;
+
+    /**
      * Fetch the documentation for the short code.
      *
      * @param ShortcodeDocumentation[] $documentation An array of ShortcodeDocumentation instances.
