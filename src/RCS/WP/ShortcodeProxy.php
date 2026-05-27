@@ -94,8 +94,8 @@ class ShortcodeProxy
     {
         $matches = [];
 
-        if (preg_match('/(wp_ajax_nopriv_|wp_ajax_)(.*)/', current_action(), $matches)) {
-            $isprivate = 'wp_ajax_nopriv_' == $matches[1];
+        if (preg_match('/^(wp_ajax_nopriv_|wp_ajax_)(.*)$/', current_action(), $matches)) {
+            $isPublic = 'wp_ajax_nopriv_' == $matches[1];
             $shortcodeTag = $matches[2];
 
             // Verify the shortcode is in our map
@@ -105,10 +105,10 @@ class ShortcodeProxy
                     /** @var ShortcodeImplInf */
                     $obj = $this->diContainer->get($this->shortcodeMap[$shortcodeTag]);
 
-                    if ($isprivate) {
-                        $obj->handlePrivateAjaxRequest();
-                    } else {
+                    if ($isPublic) {
                         $obj->handlePublicAjaxRequest();
+                    } else {
+                        $obj->handlePrivateAjaxRequest();
                     }
                 }
                 catch (NotFoundExceptionInterface | ContainerExceptionInterface $e) {
