@@ -7,6 +7,7 @@ use Monolog\LogRecord;
 use Monolog\Logger;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\RotatingFileHandler;
+use Monolog\Processor\IntrospectionProcessor;
 use Monolog\Processor\PsrLogMessageProcessor;
 use Psr\Log\LoggerInterface;
 
@@ -28,40 +29,55 @@ class PluginLogger implements LoggerInterface
         $logFile = $logDir . DIRECTORY_SEPARATOR . $pluginInfo->getSlug() . '.log';
 
         $dateFormat = 'M d H:i:s';
-        $msgFormat = join(' ', [
-            '%datetime%',
-            '%level_name%',
-            '[%extra.reqId%]',
-            ':',
-            '%message% %context% %extra%'
-        ]
-            ).PHP_EOL;
+        $msgFormat = join(
+            ' ',
+            [
+                '%datetime%',
+                '%level_name%',
+                '%extra.class%',
+                '[%extra.reqId%]',
+                '(%extra.userId%/%extra.userName%)',
+                ':',
+                '%message% %context% %extra%'
+            ]
+        ).PHP_EOL;
 
-            $formatter = new LineFormatter ($msgFormat, $dateFormat, false, true);
-            $formatter->setMaxLevelNameLength(3);
+        $formatter = new LineFormatter ($msgFormat, $dateFormat, false, true);
+        $formatter->setMaxLevelNameLength(3);
 
 //             $handler = new StreamHandler($this->logFile);
 //             $handler->setFormatter($formatter); //  attach the formatter to the handler
 
-            $handler = new RotatingFileHandler($logFile, 14, Level::Debug);
-            $handler->setFormatter($formatter); //  attach the formatter to the handler
+        $handler = new RotatingFileHandler($logFile, 14, Level::Debug);
+        $handler->setFormatter($formatter); //  attach the formatter to the handler
 
-            $logger = new Logger($pluginInfo->getSlug());
-            $logger->pushHandler($handler);
-            $logger->pushProcessor(new PsrLogMessageProcessor(null, true));
-            $logger->pushProcessor(function (LogRecord $record): LogRecord {
-                if (isset($_SERVER['REQUEST_TIME_FLOAT'])) {
-                    $reqId = $_SERVER['REQUEST_TIME_FLOAT'];
-                } else {
-                    $reqId = $_SERVER['REQUEST_TIME'];
+        $logger = new Logger($pluginInfo->getSlug());
+        $logger->pushHandler($handler);
+        $logger->pushProcessor(new IntrospectionProcessor());
+        $logger->pushProcessor(new PsrLogMessageProcessor(null, true));
+        $logger->pushProcessor(function (LogRecord $record): LogRecord {
+            if (isset($_SERVER['REQUEST_TIME_FLOAT'])) {
+                $reqId = $_SERVER['REQUEST_TIME_FLOAT'];
+            } else {
+                $reqId = $_SERVER['REQUEST_TIME'];
+            }
+
+            $record->extra['reqId'] = str_pad(strval($reqId), 15, '0', STR_PAD_RIGHT);
+
+            if (function_exists( 'wp_get_current_user' ) ) {
+                $wpUser = wp_get_current_user();
+
+                if ($wpUser->exists()) {
+                    $record->extra['userId'] = $wpUser->ID;
+                    $record->extra['userName'] = $wpUser->user_login;
                 }
+            }
 
-                $record->extra['reqId'] = str_pad(strval($reqId), 15, '0', STR_PAD_RIGHT);
 
-                return $record;
-            });
+            return $record;
+        });
 
-            $this->backingLogger = $logger;
+        $this->backingLogger = $logger;
     }
 
     /**

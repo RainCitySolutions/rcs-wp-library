@@ -98,7 +98,7 @@ abstract class CronJob
 
         if ($bgProcess instanceof \WP_Background_Process) {
             // Does not exist in the a5shleyrich version
-            if (method_exists($bgProcess, 'is_active')) { // @phpstan-ignore function.alreadyNarrowedType
+            if (method_exists($bgProcess, 'is_active')) {
                 $isJobActive = $bgProcess->is_active();
             } elseif (method_exists($bgProcess, 'is_process_running')) {
                 $method = new \ReflectionMethod($bgProcess, 'is_process_running');
