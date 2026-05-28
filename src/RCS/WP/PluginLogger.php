@@ -20,7 +20,7 @@ class PluginLogger implements LoggerInterface
      * @param PluginInfoInterface $pluginInfo
      */
     public function __construct(
-        PluginInfoInterface $pluginInfo
+        protected readonly PluginInfoInterface $pluginInfo
         )
     {
         $logDir = $pluginInfo->getWriteDir() . 'logs';
@@ -38,7 +38,7 @@ class PluginLogger implements LoggerInterface
                 '[%extra.reqId%]',
                 '(%extra.userId%/%extra.userName%)',
                 ':',
-                '%message% %context% %extra%'
+                '%message% %context%'
             ]
         ).PHP_EOL;
 
@@ -53,9 +53,27 @@ class PluginLogger implements LoggerInterface
 
         $logger = new Logger($pluginInfo->getSlug());
         $logger->pushHandler($handler);
-        $logger->pushProcessor(new IntrospectionProcessor());
-        $logger->pushProcessor(new PsrLogMessageProcessor(null, true));
-        $logger->pushProcessor(function (LogRecord $record): LogRecord {
+
+        $this->addProcessors($logger);
+
+        $this->backingLogger = $logger;
+    }
+
+    protected function addProcessors(Logger $logger): void
+    {
+        // Custom process to trim and pad classname added by IntrospectionProcessor
+        $classnameProcessor = function (LogRecord $record): LogRecord
+        {
+            if (isset($record['extra']['class'])) {
+                // basename() gets the class name without the namespace
+                $record['extra']['class'] = str_pad(basename($record['extra']['class']), 30);
+            }
+
+            return $record;
+        };
+
+        $requestIdProccessor = function (LogRecord $record): LogRecord
+        {
             if (isset($_SERVER['REQUEST_TIME_FLOAT'])) {
                 $reqId = $_SERVER['REQUEST_TIME_FLOAT'];
             } else {
@@ -64,6 +82,11 @@ class PluginLogger implements LoggerInterface
 
             $record->extra['reqId'] = str_pad(strval($reqId), 15, '0', STR_PAD_RIGHT);
 
+            return $record;
+        };
+
+        $userContextProccessor = function (LogRecord $record): LogRecord
+        {
             if (function_exists( 'wp_get_current_user' ) ) {
                 $wpUser = wp_get_current_user();
 
@@ -73,11 +96,27 @@ class PluginLogger implements LoggerInterface
                 }
             }
 
-
             return $record;
-        });
+        };
 
-        $this->backingLogger = $logger;
+        $introspectionProcessor = new IntrospectionProcessor(
+            skipClassesPartials: [
+                PluginLogger::class
+            ]
+        );
+
+        $processors = [
+            $classnameProcessor,
+            $introspectionProcessor,
+            new PsrLogMessageProcessor(null, true),
+            $requestIdProccessor,
+            $userContextProccessor
+        ];
+
+
+        foreach($processors as $processor) {
+            $logger->pushProcessor($processor);
+        }
     }
 
     /**
