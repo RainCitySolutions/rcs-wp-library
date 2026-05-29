@@ -7,6 +7,7 @@ use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
 use Psr\Log\LoggerInterface;
 use RCS\WP\Ajax\AjaxHandlerImplInf;
+use RCS\WP\Ajax\AjaxHandlerResponse;
 
 /**
  * This class acts as a proxy for classes implementing AJAX handlers,
@@ -33,6 +34,7 @@ class AjaxHandlerProxy
     public function handleAjaxRequest(): void
     {
         $matches = [];
+        $ajaxRespone = new AjaxHandlerResponse();
 
         if (preg_match('/^(wp_ajax_nopriv_|wp_ajax_)(.*)$/', current_action(), $matches)) {
             $isPublic = 'wp_ajax_nopriv_' == $matches[1];
@@ -46,9 +48,9 @@ class AjaxHandlerProxy
                     $obj = $this->diContainer->get($this->handlerMap[$action]);
 
                     if ($isPublic) {
-                        $obj->handlePublicAjaxRequest($action);
+                        $ajaxRespone = $obj->handlePublicAjaxRequest($action);
                     } else {
-                        $obj->handlePrivateAjaxRequest($action);
+                        $ajaxRespone = $obj->handlePrivateAjaxRequest($action);
                     }
                 }
                 catch (NotFoundExceptionInterface | ContainerExceptionInterface $e) {
@@ -63,7 +65,7 @@ class AjaxHandlerProxy
             }
         }
 
-        wp_die();
+        wp_die($ajaxRespone->getMessage(), $ajaxRespone->getTitle());
     }
 
     /**
