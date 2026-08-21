@@ -12,7 +12,7 @@
 		"monolog/monolog" : "~3.10",
 		"symfony/cache" : "~7.4",
 		"json-mapper/json-mapper" : "~2.25",
-		"guzzlehttp/guzzle" : "~7.10",
+		"guzzlehttp/guzzle" : "~7.10 || ~8.0",
 		"deliciousbrains/wp-background-processing" : "~1.4",
 		"geocoder-php/google-maps-provider" : "~4.8"
 	},
