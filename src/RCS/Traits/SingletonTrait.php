@@ -27,10 +27,17 @@ trait SingletonTrait {
      */
     final protected function __construct()
     {
-        $self = get_class();
+        $parentClass = get_parent_class($this);
 
-        if (get_parent_class($self)) {
-            parent::__construct();  // @phpstan-ignore class.noParent
+        if ($parentClass && method_exists($parentClass, '__construct')) {
+            $parentConstructor = new \ReflectionMethod($parentClass, '__construct');
+            $currentConstructor = new \ReflectionMethod($this, '__construct');
+
+            $isSameTraitCode = $parentConstructor->getFileName() === $currentConstructor->getFileName();
+
+            if (!$isSameTraitCode) {
+                $parentConstructor->invokeArgs($this, func_get_args());
+            }
         }
     }
 

@@ -19,7 +19,7 @@ final class TestShortcode extends ShortcodeBase
         return 'test_shortcode';
     }
 
-    public function renderShortcode(array $atts = [], string $content = null): string
+    public function renderShortcode(array $atts = [], ?string $content = null): string
     {
         return 'rendered-content';
     }

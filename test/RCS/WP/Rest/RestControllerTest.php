@@ -28,7 +28,7 @@ final class RestControllerTest extends TestCase
     /**
      * Create a testable concrete subclass of RestController.
      */
-    private function createController(callable &$registeredCallback = null): TestRestController
+    private function createController(?callable &$registeredCallback = null): TestRestController
     {
         $pluginInfo = $this->createMock(PluginInfoInterface::class);
         $pluginInfo->method('getSlug')->willReturn('my-plugin');

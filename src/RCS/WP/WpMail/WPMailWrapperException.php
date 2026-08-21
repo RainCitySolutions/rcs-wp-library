@@ -16,7 +16,7 @@ final class WPMailWrapperException extends RuntimeException
     public function __construct(
         string $message = '',
         private string $debugData = '',
-        Throwable $previous = null
+        ?Throwable $previous = null
         )
     {
         parent::__construct($message, 0, $previous);

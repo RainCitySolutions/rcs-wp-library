@@ -42,7 +42,7 @@ class PDFService
     public function __construct(
         string $svcUrl,
         private LoggerInterface $logger,
-        ClientInterface $httpClient = null,
+        ?ClientInterface $httpClient = null,
         float $timeout = 30.0
         )
     {

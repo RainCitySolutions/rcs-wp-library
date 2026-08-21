@@ -11,6 +11,8 @@
 	cacheDirectory=".phpunit.cache"
 	requireCoverageMetadata="true"
 	beStrictAboutCoverageMetadata="true"
+    displayDetailsOnTestsThatTriggerDeprecations="true"
+    displayDetailsOnPhpunitDeprecations="true"
 	>
   <testsuites>
     <testsuite name="Tests">
