@@ -13,8 +13,8 @@ jobs:
       # OS additions
       - name: Add to OS
         run: |
-          sudo apt update -y
-          sudo apt install memcached -y
+          sudo apt-get update -y
+          sudo apt-get install memcached -y
            
       # Checkout our code 
       - name: Checkout code
