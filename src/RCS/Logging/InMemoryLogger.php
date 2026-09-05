@@ -2,10 +2,12 @@
 declare(strict_types=1);
 namespace RCS\Logging;
 
+use Monolog\Level;
 use Monolog\Logger;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\TestHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
+use Psr\Log\LogLevel;
 use Psr\Log\LoggerInterface;
 
 class InMemoryLogger implements LoggerInterface
@@ -26,7 +28,7 @@ class InMemoryLogger implements LoggerInterface
         $this->logger = new Logger(self::LOGGER_NAME);
 
         $dateformat = 'M d H:i:s';
-        $format = '%datetime% %level_name% %channel%: %message% %context%'.PHP_EOL;
+        $format = '%datetime% %level_name% : %message% %context%'.PHP_EOL;
 
         $formatter = new LineFormatter ($format, $dateformat, false, true);
         $formatter->setMaxLevelNameLength(3);
@@ -54,6 +56,17 @@ class InMemoryLogger implements LoggerInterface
 
         return $result;
     }
+
+    /**
+     * @param int|string|Level|LogLevel::* $level Logging level value or name
+     *
+     * @phpstan-param value-of<Level::VALUES>|value-of<Level::NAMES>|Level|LogLevel::* $level
+     */
+    public function hasRecords(int|string|Level|LogLevel $level): bool
+    {
+        return $this->handler->hasRecords($level);
+    }
+
     /**
      * {@inheritDoc}
      * @see \Psr\Log\LoggerInterface::alert()

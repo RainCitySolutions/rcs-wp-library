@@ -83,7 +83,7 @@ final class InMemoryLoggerTest extends TestCase
         $msgs = $this->logger->getLogMsgs();
 
         self::assertMatchesRegularExpression(
-            '/^[A-Z][a-z]{2} [0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} INF InMemoryLogger: formatted test \r?\n/',
+            '/^[A-Z][a-z]{2} [0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} INF : formatted test \r?\n/',
             $msgs[0],
             'Message should match expected Monolog LineFormatter format'
             );
