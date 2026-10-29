@@ -40,7 +40,7 @@ final class CronJobTest extends TestCase
             CronJob::EVERY_5_MINUTES => ['interval' => 300, 'display' => 'Every Five Minutes']
         ]);
         Functions\expect('wp_next_scheduled')->once()->with('testJob')->andReturn(false);
-        Functions\expect('wp_schedule_event')->once()->with(self::isType('int'), 'every5minutes', 'testJob');
+        Functions\expect('wp_schedule_event')->once()->with(self::isInt(), 'every5minutes', 'testJob');
 
         $cronJob = new TestCronJob($logger);
         $cronJob->exposeInitialize('testJob', CronJob::EVERY_5_MINUTES);
