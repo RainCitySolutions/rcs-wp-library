@@ -5,11 +5,27 @@ namespace RCS\WP\Formidable;
 /**
  * A convienence class for looking up key/id pairs and other things related
  * to Formidable Forms tables.
+ * 
+ * While Formidable will cache database responses for get_id_by_key and 
+ * get_key_by_id, we cache them ourselves to avoid the overhead of Formidable
+ * working out if the value is in the database cache.
+ * <p>
+ * 20261103 - Changed class to use local, in-memory caching arrays for the
+ * key to id mappings. After testing the version that relies on the database
+ * caching within the Formidable code, and a version of the class that
+ * persists the maps across requests, it was found that this local,
+ * in-memory implementation provides the best performance.
  */
 class Formidable
 {
     private const FRM_CACHE_FLAG = 'prevent_caching';
 
+    /** @var array<string, int> */
+    private static array $formIdCache = [];
+    /** @var array<string, int> */
+    private static array $fieldIdCache = [];
+    /** @var array<string, int> */
+    private static array $viewIdCache = [];
     /** @var int[] */
     private static array $dbCacheState = [];
 
@@ -23,7 +39,7 @@ class Formidable
      */
     public static function getFormId(string $key): ?int
     {
-        return \FrmForm::get_id_by_key($key) ?: null;
+        return self::getId('\FrmForm', $key, self::$formIdCache);
     }
 
 
@@ -37,7 +53,7 @@ class Formidable
      */
     public static function getFormKey(int $id): ?string
     {
-        return \FrmForm::get_key_by_id($id);
+        return self::getKey('\FrmForm', $id, self::$formIdCache);
     }
 
 
@@ -51,7 +67,7 @@ class Formidable
      */
     public static function getFieldId(string $key): ?int
     {
-        return \FrmField::get_id_by_key($key) ?: null;
+        return self::getId('\FrmField', $key, self::$fieldIdCache);
     }
 
     /**
@@ -64,7 +80,7 @@ class Formidable
      */
     public static function getFieldKey(int $id): ?string
     {
-        return \FrmField::get_key_by_id($id);
+        return self::getKey('\FrmField', $id, self::$fieldIdCache);
     }
 
 
@@ -78,7 +94,7 @@ class Formidable
      */
     public static function getViewId(string $key): ?int
     {
-        return \FrmViewsDisplay::get_id_by_key($key) ?: null;
+        return self::getId('\FrmViewsDisplay', $key, self::$viewIdCache);
     }
 
 
@@ -92,7 +108,69 @@ class Formidable
      */
     public static function getViewKey(int $id): ?string
     {
-        return \FrmViewsDisplay::get_key_by_id($id);
+        return self::getKey('\FrmViewsDisplay', $id, self::$viewIdCache);
+    }
+
+    /**
+     * Returns the ID for a Formidable class entry given its key.
+     *
+     * @param string $classname The name of the class to use in looking
+     *             the key.
+     * @param string $key The key of a Formidable entry.
+     * @param array<string, int> &$cache A reference to an array to use for cacing the id.
+     *
+     * @return int|NULL The ID of the entry or null if no entry was found
+     *         with the specified key.
+     */
+    private static function getId(string $classname, string $key, array &$cache): ?int
+    {
+        $id = null;
+
+        // If the class we need is available, continue
+        if (class_exists($classname)) {
+            if (isset($cache[$key])) {
+                $id = $cache[$key];
+            }
+            else {
+                $dbId = intval($classname::get_id_by_key($key));
+                if (0 !== $dbId) {
+                    $cache[$key] = $dbId;
+                    $id = $dbId;
+                }
+            }
+        }
+
+        return $id;
+    }
+
+    /**
+     * Returns the key for a Formidable class entry given its ID.
+     *
+     * @param string $classname The name of the class to use in looking
+     *             the key.
+     * @param int $id The id of a Formidable entry.
+     * @param array<string, int> &$cache A reference to an array to use for cacing the id.
+     *
+     * @return string|NULL The keyof the entry or null if no entry was found
+     *         with the specified id.
+     */
+    private static function getKey(string $classname, int $id, array &$cache): ?string
+    {
+        $key = null;
+
+        // If the class we need is available, continue
+        if (class_exists($classname)) {
+            $key = array_search($id, $cache);
+
+            if (false === $key) {
+                $key = $classname::get_key_by_id($id);
+                if (!is_null($key) && !empty($key)) {
+                    $cache[strval($key)] = $id;
+                }
+            }
+        }
+
+        return $key;
     }
 
     /**
@@ -153,10 +231,12 @@ class Formidable
     {
         $options = [];
 
-        $field = \FrmField::getOne($fieldId);
+        if (class_exists(\FrmField::class)) {
+            $field = \FrmField::getOne($fieldId);
 
-        if (isset($field) && isset($field->options)) {
-            $options = $field->options;
+            if (isset($field) && isset($field->options)) {
+                $options = $field->options;
+            }
         }
 
         return $options;

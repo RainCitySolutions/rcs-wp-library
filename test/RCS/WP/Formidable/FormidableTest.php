@@ -2,291 +2,449 @@
 declare(strict_types=1);
 namespace RCS\WP\Formidable;
 
-use Mockery\LegacyMockInterface;
-use Mockery\MockInterface;
-use PHPUnit\Framework\TestCase;
+require_once __DIR__ . '/../../../Fixtures/FormidableStubs.php';
+
 use PHPUnit\Framework\Attributes\CoversClass;
-use RCS\Util\ReflectionHelper;
-use PHPUnit\Framework\Attributes\UsesClass;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use RCS\WP\Formidable\Formidable;
 
 #[CoversClass(Formidable::class)]
-#[UsesClass(ReflectionHelper::class)]
-class FormidableTest extends TestCase
+final class FormidableTest extends TestCase
 {
-    const FORM_KEY = 'formKey';
-    const FIELD_KEY = 'fieldKey';
-    const VIEW_KEY = 'viewKey';
+    private const FLAG = 'prevent_caching';
 
-    private const OPTION_1_LABEL = 'Test Option 1 Label';
-    private const OPTION_1_VALUE = 'Test Option 1 Value';
-    private const OPTION_2_LABEL = 'Test Option 2 Label';
-    private const OPTION_2_VALUE = 2;
-
-    private static LegacyMockInterface&MockInterface $mockFrmForm;
-    private static LegacyMockInterface&MockInterface $mockFrmField;
-    private static LegacyMockInterface&MockInterface $mockFrmViewsDisplay;
-
-    private static ?int $testId = null;
-    private static ?string $testKey = null;
-
-    private static \stdClass $testEntry;
-
-    /**
-     * Set the identifier to be returned by the mock object
-     *
-     * @param int $id An identifier
-     */
-    private function setTestId(?int $id): void
+    protected function setUp(): void
     {
-        self::$testId = $id;
+        // The class under test keeps its state in private statics, so wipe
+        // them between tests to keep tests independent.
+        $this->resetStatic('formIdCache', []);
+        $this->resetStatic('fieldIdCache', []);
+        $this->resetStatic('viewIdCache', []);
+        $this->resetStatic('dbCacheState', []);
+
+        \FrmForm::reset();
+        \FrmField::reset();
+        \FrmField::$fields = [];
+        \FrmViewsDisplay::reset();
+
+        $GLOBALS['frm_vars'] = [];
     }
 
-    private function setTestKey(?string $key): void
+    protected function tearDown(): void
     {
-        self::$testKey = $key;
+        unset($GLOBALS['frm_vars']);
     }
 
-    private static function initTestEntry(): void
+    private function resetStatic(string $property, mixed $value): void
     {
-        $options = [
-            [
-                'label' => self::OPTION_1_LABEL,
-                'value' => self::OPTION_1_VALUE
-            ],
-            [
-                'label' => self::OPTION_2_LABEL,
-                'value' => self::OPTION_2_VALUE
-            ]
+        $ref = new \ReflectionProperty(Formidable::class, $property);
+        $ref->setValue(null, $value);
+    }
+
+    private function getStatic(string $property): mixed
+    {
+        return (new \ReflectionProperty(Formidable::class, $property))->getValue();
+    }
+
+    // ------------------------------------------------------------------
+    // ID lookups (form, field, view)
+    // ------------------------------------------------------------------
+
+    /** @return array<string, array{string, string}> [method, stub class] */
+    public static function idLookupProvider(): array
+    {
+        return [
+            'form'  => ['getFormId',  \FrmForm::class],
+            'field' => ['getFieldId', \FrmField::class],
+            'view'  => ['getViewId',  \FrmViewsDisplay::class],
         ];
-
-        self::$testEntry = new \stdClass();
-        self::$testEntry->options = $options;
     }
 
-
-    /**
-     * {@inheritDoc}
-     * @see \PHPUnit\Framework\TestCase::setUpBeforeClass()
-     */
-    public static function setUpBeforeClass(): void
+    #[DataProvider('idLookupProvider')]
+    public function testGetIdReturnsIdForKnownKey(string $method, string $stub): void
     {
-        /* Check if the actual Formidable Forms are available. If so, we
-         * can't use our test classes.
-         */
-//         if (class_exists(\FrmField::class)) {
-            self::initTestEntry();
+        $stub::$idsByKey = ['my_key' => 42];
 
-            self::$mockFrmForm = \Mockery::mock('overload:\FrmForm');
-            self::$mockFrmForm->shouldReceive('get_id_by_key')->andReturnUsing(fn() => (int)self::$testId); // cast to match Formidable behavior
-            self::$mockFrmForm->shouldReceive('get_key_by_id')->andReturnUsing(fn() => self::$testKey);
-
-            self::$mockFrmField = \Mockery::mock('overload:\FrmField');
-            self::$mockFrmField->shouldReceive('get_id_by_key')->andReturnUsing(fn() => (int)self::$testId);    // cast to match Formidable behavior
-            self::$mockFrmField->shouldReceive('get_key_by_id')->andReturnUsing(fn() => self::$testKey);
-            self::$mockFrmField->shouldReceive('getOne')->andReturnUsing(fn() => self::$testEntry);
-
-            self::$mockFrmViewsDisplay = \Mockery::mock('overload:\FrmViewsDisplay');
-            self::$mockFrmViewsDisplay->shouldReceive('get_id_by_key')->andReturnUsing(fn() => (int)self::$testId); // cast to match Formidable behavior
-            self::$mockFrmViewsDisplay->shouldReceive('get_key_by_id')->andReturnUsing(fn() => self::$testKey);
-            //         } else {
-//             self::markTestSkipped('Real Formidable classes are available, unable to test');
-//         }
+        $this->assertSame(42, Formidable::$method('my_key'));
     }
 
-    /************************************************************************
-     * FrmForm Tests
-     ************************************************************************/
-    public function testGetFormId_missingId (): void
+    #[DataProvider('idLookupProvider')]
+    public function testGetIdCastsNumericStringToInt(string $method, string $stub): void
     {
-        $this->setTestId(null);
+        // Formidable returns ids from $wpdb as strings.
+        $stub::$idsByKey = ['my_key' => 17];
 
-        $id = Formidable::getFormId(self::FORM_KEY);
-
-        self::assertNull($id);
+        $this->assertSame(17, Formidable::$method('my_key'));
     }
 
-    public function testGetFormId_notCached (): void
+    #[DataProvider('idLookupProvider')]
+    public function testGetIdReturnsNullForUnknownKey(string $method, string $stub): void
     {
-        $testId = 27;
-        $this->setTestId($testId);
-
-        $id = Formidable::getFormId(self::FORM_KEY);
-
-        self::assertEquals($testId, $id);
+        $this->assertNull(Formidable::$method('does_not_exist'));
     }
 
-    public function testGetFormKey_missingKey (): void
+    #[DataProvider('idLookupProvider')]
+    public function testGetIdCachesSuccessfulLookups(string $method, string $stub): void
     {
-        $testId = 23;
-        $this->setTestKey(null);
+        $stub::$idsByKey = ['my_key' => 42];
 
-        $key = Formidable::getFormKey($testId);
+        Formidable::$method('my_key');
+        Formidable::$method('my_key');
+        Formidable::$method('my_key');
 
-        self::assertNull($key);
+        $this->assertSame(1, $stub::$idCalls);
     }
 
-    public function testGetFormKey_notCached (): void
+    #[DataProvider('idLookupProvider')]
+    public function testGetIdDoesNotCacheMisses(string $method, string $stub): void
     {
-        $testId = 63;
-        $this->setTestkey(self::FORM_KEY);
+        $this->assertNull(Formidable::$method('late_key'));
 
-        $key = Formidable::getFormKey($testId);
+        // The entry is created after the first miss; it should now be found.
+        $stub::$idsByKey = ['late_key' => 9];
 
-        self::assertEquals(self::$testKey, $key);
+        $this->assertSame(9, Formidable::$method('late_key'));
+        $this->assertSame(2, $stub::$idCalls);
     }
 
-    /************************************************************************
-     * FrmField Tests
-     ************************************************************************/
-    public function testGetFieldId_missingId (): void
+    #[DataProvider('idLookupProvider')]
+    public function testGetIdCachesEachKeySeparately(string $method, string $stub): void
     {
-        $this->setTestId(null);
+        $stub::$idsByKey = ['a' => 1, 'b' => 2];
 
-        $id = Formidable::getFieldId(self::FIELD_KEY);
-
-        self::assertNull($id);
+        $this->assertSame(1, Formidable::$method('a'));
+        $this->assertSame(2, Formidable::$method('b'));
+        $this->assertSame(1, Formidable::$method('a'));
+        $this->assertSame(2, $stub::$idCalls);
     }
 
-    public function testGetFieldId_notCached (): void
+    // ------------------------------------------------------------------
+    // Key lookups (form, field)
+    // ------------------------------------------------------------------
+
+    /** @return array<string, array{string, string, string}> [idMethod, keyMethod, stub class] */
+    public static function keyLookupProvider(): array
     {
-        $testId = 39;
-        $this->setTestId($testId);
-
-        $id = Formidable::getFieldId(self::FIELD_KEY);
-
-        self::assertEquals($testId, $id);
+        return [
+            'form'  => ['getFormId',  'getFormKey',  \FrmForm::class],
+            'field' => ['getFieldId', 'getFieldKey', \FrmField::class],
+        ];
     }
 
-    public function testGetFieldKey_missingKey (): void
+    #[DataProvider('keyLookupProvider')]
+    public function testGetKeyReturnsKeyForKnownId(string $idMethod, string $keyMethod, string $stub): void
     {
-        $testId = 48;
-        $this->setTestKey(null);
+        $stub::$keysById = [42 => 'my_key'];
 
-        $key = Formidable::getFieldKey($testId);
-
-        self::assertNull($key);
+        $this->assertSame('my_key', Formidable::$keyMethod(42));
     }
 
-    public function testGetFieldKey_notCached (): void
+    #[DataProvider('keyLookupProvider')]
+    public function testGetKeyReturnsNullForUnknownId(string $idMethod, string $keyMethod, string $stub): void
     {
-        $testId = 39;
-        $this->setTestKey(self::FIELD_KEY);
-
-        $key = Formidable::getFieldKey($testId);
-
-        self::assertEquals(self::$testKey, $key);
+        $this->assertNull(Formidable::$keyMethod(999));
     }
 
-    /************************************************************************
-     * FrmView Tests
-     ************************************************************************/
-    public function testGetViewId_missingId (): void
+    #[DataProvider('keyLookupProvider')]
+    public function testGetKeyCachesSuccessfulLookups(string $idMethod, string $keyMethod, string $stub): void
     {
-        $this->setTestId(null);
+        $stub::$keysById = [42 => 'my_key'];
 
-        $id = Formidable::getViewId(self::VIEW_KEY);
+        Formidable::$keyMethod(42);
+        Formidable::$keyMethod(42);
 
-        self::assertNull($id);
+        $this->assertSame(1, $stub::$keyCalls);
     }
 
-    public function testGetViewId_notCached (): void
+    #[DataProvider('keyLookupProvider')]
+    public function testGetKeyDoesNotCacheMisses(string $idMethod, string $keyMethod, string $stub): void
     {
-        $testId = 72;
-        $this->setTestId($testId);
+        $this->assertNull(Formidable::$keyMethod(5));
 
-        $id = Formidable::getViewId(self::VIEW_KEY);
+        $stub::$keysById = [5 => 'late_key'];
 
-        self::assertEquals(self::$testId, $id);
+        $this->assertSame('late_key', Formidable::$keyMethod(5));
+        $this->assertSame(2, $stub::$keyCalls);
     }
 
-    public function testGetViewKey_missingKey (): void
+    #[DataProvider('keyLookupProvider')]
+    public function testGetKeyUsesCachePopulatedByGetId(string $idMethod, string $keyMethod, string $stub): void
     {
-        $testId = 48;
-        $this->setTestKey(null);
+        $stub::$idsByKey = ['my_key' => 42];
 
-        $key = Formidable::getViewKey($testId);
+        Formidable::$idMethod('my_key');
 
-        self::assertNull($key);
+        $this->assertSame('my_key', Formidable::$keyMethod(42));
+        $this->assertSame(0, $stub::$keyCalls, 'Key should come from the cache, not Formidable');
     }
 
-    public function testGetViewKey_notCached (): void
+    #[DataProvider('keyLookupProvider')]
+    public function testGetIdUsesCachePopulatedByGetKey(string $idMethod, string $keyMethod, string $stub): void
     {
-        $testId = 72;
-        $this->setTestKey(self::VIEW_KEY);
+        $stub::$keysById = [42 => 'my_key'];
 
-        $key = Formidable::getViewKey($testId);
+        Formidable::$keyMethod(42);
 
-        self::assertEquals(self::$testKey, $key);
+        $this->assertSame(42, Formidable::$idMethod('my_key'));
+        $this->assertSame(0, $stub::$idCalls, 'Id should come from the cache, not Formidable');
     }
 
-    public function testGetAllId_unique (): void
+    public function testFormAndFieldCachesAreIndependent(): void
     {
-        $key = 'SameKey';
+        \FrmForm::$idsByKey  = ['shared_key' => 1];
+        \FrmField::$idsByKey = ['shared_key' => 2];
 
-        $testFormId = 77;
-        $testFieldId = 88;
-        $testViewId = 99;
-
-        $this->setTestId($testFormId);
-        $formId = Formidable::getFormId($key);
-
-        $this->setTestId($testFieldId);
-        $fieldId = Formidable::getFieldId($key);
-
-        $this->setTestId($testViewId);
-        $viewId = Formidable::getViewId($key);
-
-        self::assertEquals($testFormId, $formId);
-        self::assertEquals($testFieldId, $fieldId);
-        self::assertEquals($testViewId, $viewId);
+        $this->assertSame(1, Formidable::getFormId('shared_key'));
+        $this->assertSame(2, Formidable::getFieldId('shared_key'));
     }
 
-    /************************************************************************
-     * Get Label/Value Tests
-     ************************************************************************/
-    public function testGetFieldOptionLabel_string(): void
-    {
-        $label = Formidable::getFieldOptionLabel(0, self::OPTION_1_VALUE);
+    // ------------------------------------------------------------------
+    // View keys.
+    // NOTE: Formidable::getViewKey() is missing a `return` statement, so
+    // these tests FAIL (TypeError: none returned) until that is fixed.
+    // ------------------------------------------------------------------
 
-        self::assertNotEmpty($label);
-        self::assertEquals(self::OPTION_1_LABEL, $label);
+    public function testGetViewKeyReturnsKeyForKnownId(): void
+    {
+        \FrmViewsDisplay::$keysById = [7 => 'my_view'];
+
+        $this->assertSame('my_view', Formidable::getViewKey(7));
     }
 
-    public function testGetFieldOptionLabel_int(): void
+    public function testGetViewKeyReturnsNullForUnknownId(): void
     {
-        $label = Formidable::getFieldOptionLabel(0, self::OPTION_2_VALUE);
-
-        self::assertNotEmpty($label);
-        self::assertEquals(self::OPTION_2_LABEL, $label);
+        $this->assertNull(Formidable::getViewKey(999));
     }
 
-    public function testGetFieldOptionValue_string(): void
+    public function testGetViewKeyIsCachedAndSharedWithGetViewId(): void
     {
-        $label = Formidable::getFieldOptionValue(0, self::OPTION_1_LABEL);
+        \FrmViewsDisplay::$keysById = [7 => 'my_view'];
 
-        self::assertNotEmpty($label);
-        self::assertIsString($label);
-        self::assertEquals(self::OPTION_1_VALUE, $label);
+        Formidable::getViewKey(7);
+
+        $this->assertSame(7, Formidable::getViewId('my_view'));
+        $this->assertSame(0, \FrmViewsDisplay::$idCalls);
     }
 
-    public function testGetFieldOptionValue_int(): void
-    {
-        $label = Formidable::getFieldOptionValue(0, self::OPTION_2_LABEL);
+    // ------------------------------------------------------------------
+    // disableDbCache() / restoreDbCache()
+    // ------------------------------------------------------------------
 
-        self::assertNotEmpty($label);
-        self::assertIsNumeric($label);
-        self::assertEquals(self::OPTION_2_VALUE, $label);
+    public function testDisableDbCacheSetsFlag(): void
+    {
+        Formidable::disableDbCache();
+
+        $this->assertTrue($GLOBALS['frm_vars'][self::FLAG]);
     }
 
-    public function testDisableAndRestoreDbCacheStoresState(): void
+    public function testRestoreRemovesFlagWhenItWasNotSetBefore(): void
     {
-        global $frm_vars;
-        $frm_vars = ['prevent_caching' => false];
+        Formidable::disableDbCache();
+        Formidable::restoreDbCache();
+
+        $this->assertArrayNotHasKey(self::FLAG, $GLOBALS['frm_vars']);
+    }
+
+    public function testRestoreReinstatesPreviousFalseValue(): void
+    {
+        $GLOBALS['frm_vars'][self::FLAG] = false;
 
         Formidable::disableDbCache();
-        $this->assertTrue($frm_vars['prevent_caching']);    // @phpstan-ignore method.impossibleType (set to true be Formidable class)
+        $this->assertTrue($GLOBALS['frm_vars'][self::FLAG]);
 
         Formidable::restoreDbCache();
-        $this->assertFalse($frm_vars['prevent_caching']);
+        $this->assertFalse($GLOBALS['frm_vars'][self::FLAG]);
+    }
+
+    public function testRestoreReinstatesPreviousTrueValue(): void
+    {
+        $GLOBALS['frm_vars'][self::FLAG] = true;
+
+        Formidable::disableDbCache();
+        Formidable::restoreDbCache();
+
+        $this->assertTrue($GLOBALS['frm_vars'][self::FLAG]);
+    }
+
+    public function testNestedDisableAndRestore(): void
+    {
+        Formidable::disableDbCache();
+        Formidable::disableDbCache();
+
+        Formidable::restoreDbCache();
+        $this->assertTrue($GLOBALS['frm_vars'][self::FLAG], 'Still disabled after inner restore');
+
+        Formidable::restoreDbCache();
+        $this->assertArrayNotHasKey(self::FLAG, $GLOBALS['frm_vars'], 'Fully restored after outer restore');
+    }
+
+    public function testRestoreWithoutDisableDoesNothing(): void
+    {
+        $GLOBALS['frm_vars'][self::FLAG] = false;
+
+        Formidable::restoreDbCache();
+
+        $this->assertFalse($GLOBALS['frm_vars'][self::FLAG]);
+        $this->assertSame([], $this->getStatic('dbCacheState'));
+    }
+
+    public function testRestoreWithUnrelatedFrmVarsLeavesThemAlone(): void
+    {
+        $GLOBALS['frm_vars']['other'] = 'keep me';
+
+        Formidable::disableDbCache();
+        Formidable::restoreDbCache();
+
+        $this->assertSame('keep me', $GLOBALS['frm_vars']['other']);
+    }
+
+    public function testDisableResetsStateWhenFlagWasRemovedExternally(): void
+    {
+        Formidable::disableDbCache();
+        Formidable::disableDbCache();            // state: [-1, true]
+        unset($GLOBALS['frm_vars'][self::FLAG]); // Formidable clears the flag
+
+        Formidable::disableDbCache();            // state should restart: [-1]
+        $this->assertSame([-1], $this->getStatic('dbCacheState'));
+
+        Formidable::restoreDbCache();
+        $this->assertArrayNotHasKey(self::FLAG, $GLOBALS['frm_vars']);
+    }
+
+    // ------------------------------------------------------------------
+    // Field options
+    // ------------------------------------------------------------------
+
+    /** @param array<int, array{value: string|int, label: string}> $options */
+    private function givenFieldWithOptions(int $fieldId, array $options): void
+    {
+        $field = new \stdClass();
+        $field->options = $options;
+        \FrmField::$fields[$fieldId] = $field;
+    }
+
+    public function testGetFieldOptionsReturnsOptions(): void
+    {
+        $options = [
+            ['value' => 'a', 'label' => 'Alpha'],
+            ['value' => 'b', 'label' => 'Beta'],
+        ];
+        $this->givenFieldWithOptions(10, $options);
+
+        $this->assertSame($options, Formidable::getFieldOptions(10));
+    }
+
+    public function testGetFieldOptionsReturnsEmptyArrayForMissingField(): void
+    {
+        $this->assertSame([], Formidable::getFieldOptions(404));
+    }
+
+    public function testGetFieldOptionsReturnsEmptyArrayWhenFieldHasNoOptionsProperty(): void
+    {
+        \FrmField::$fields[10] = new \stdClass();
+
+        $this->assertSame([], Formidable::getFieldOptions(10));
+    }
+
+    public function testGetFieldOptionsReturnsEmptyArrayWhenOptionsIsNull(): void
+    {
+        $field = new \stdClass();
+        $field->options = null;
+        \FrmField::$fields[10] = $field;
+
+        $this->assertSame([], Formidable::getFieldOptions(10));
+    }
+
+    public function testGetFieldOptionLabelReturnsMatchingLabel(): void
+    {
+        $this->givenFieldWithOptions(10, [
+            ['value' => 'a', 'label' => 'Alpha'],
+            ['value' => 'b', 'label' => 'Beta'],
+        ]);
+
+        $this->assertSame('Beta', Formidable::getFieldOptionLabel(10, 'b'));
+    }
+
+    public function testGetFieldOptionLabelReturnsEmptyStringWhenNoMatch(): void
+    {
+        $this->givenFieldWithOptions(10, [['value' => 'a', 'label' => 'Alpha']]);
+
+        $this->assertSame('', Formidable::getFieldOptionLabel(10, 'zzz'));
+    }
+
+    public function testGetFieldOptionLabelReturnsEmptyStringForMissingField(): void
+    {
+        $this->assertSame('', Formidable::getFieldOptionLabel(404, 'a'));
+    }
+
+    public function testGetFieldOptionLabelMatchesIntAgainstNumericStringValue(): void
+    {
+        $this->givenFieldWithOptions(10, [['value' => '2', 'label' => 'Two']]);
+
+        $this->assertSame('Two', Formidable::getFieldOptionLabel(10, 2));
+    }
+
+    public function testGetFieldOptionLabelMatchesStringAgainstIntValue(): void
+    {
+        $this->givenFieldWithOptions(10, [['value' => 2, 'label' => 'Two']]);
+
+        $this->assertSame('Two', Formidable::getFieldOptionLabel(10, '2'));
+    }
+
+    public function testGetFieldOptionLabelReturnsFirstMatchWhenValuesAreDuplicated(): void
+    {
+        $this->givenFieldWithOptions(10, [
+            ['value' => 'x', 'label' => 'First'],
+            ['value' => 'x', 'label' => 'Second'],
+        ]);
+
+        $this->assertSame('First', Formidable::getFieldOptionLabel(10, 'x'));
+    }
+
+    public function testGetFieldOptionValueReturnsMatchingValue(): void
+    {
+        $this->givenFieldWithOptions(10, [
+            ['value' => 'a', 'label' => 'Alpha'],
+            ['value' => 'b', 'label' => 'Beta'],
+        ]);
+
+        $this->assertSame('b', Formidable::getFieldOptionValue(10, 'Beta'));
+    }
+
+    public function testGetFieldOptionValuePreservesIntegerValues(): void
+    {
+        $this->givenFieldWithOptions(10, [['value' => 5, 'label' => 'Five']]);
+
+        $this->assertSame(5, Formidable::getFieldOptionValue(10, 'Five'));
+    }
+
+    public function testGetFieldOptionValueReturnsEmptyStringWhenNoMatch(): void
+    {
+        $this->givenFieldWithOptions(10, [['value' => 'a', 'label' => 'Alpha']]);
+
+        $this->assertSame('', Formidable::getFieldOptionValue(10, 'Nope'));
+    }
+
+    public function testGetFieldOptionValueReturnsEmptyStringForMissingField(): void
+    {
+        $this->assertSame('', Formidable::getFieldOptionValue(404, 'Alpha'));
+    }
+
+    public function testGetFieldOptionValueIsCaseSensitive(): void
+    {
+        $this->givenFieldWithOptions(10, [['value' => 'a', 'label' => 'Alpha']]);
+
+        $this->assertSame('', Formidable::getFieldOptionValue(10, 'alpha'));
+    }
+
+    public function testGetFieldOptionValueReturnsFirstMatchWhenLabelsAreDuplicated(): void
+    {
+        $this->givenFieldWithOptions(10, [
+            ['value' => 'one', 'label' => 'Dup'],
+            ['value' => 'two', 'label' => 'Dup'],
+        ]);
+
+        $this->assertSame('one', Formidable::getFieldOptionValue(10, 'Dup'));
     }
 }
