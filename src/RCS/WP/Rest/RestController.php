@@ -28,11 +28,11 @@ abstract class RestController
      * @param LoggerInterface $logger
      */
     public function __construct(
-        protected PluginInfoInterface $pluginInfo,
-        readonly int $apiVersion,
+        protected readonly PluginInfoInterface $pluginInfo,
+        private readonly int $apiVersion,
         private string $apiRoute,
-        readonly ?FactoryRegistry $factoryRegistry = null,
-        protected ?LoggerInterface $logger = null
+        protected readonly LoggerInterface $logger,
+        protected ?FactoryRegistry $factoryRegistry = null,
         )
     {
         $this->apiRoute = '/' . $this->stripRouteSlashes($apiRoute) . '/';
@@ -69,21 +69,19 @@ abstract class RestController
      * The 'callback' element of $args should not be provied. It will be overridden.
      *
      * @param string                $route      The route URI for the portion beyond the apiRoute provided during construction.
-     * @param string|object|null    $component  A reference to a class for static methods, an object for instance methods or null.
-     * @param string|callable       $callback   The name of a method on the class or object on the $component, the name of a function or a function.
-     * @param string                $method     The HTTP method
+     * @param callable              $callback   The handler for the API endpoint
+     * @param string|null           $method     The HTTP method, defaults to 'GET'
      * @param array<string, mixed>  $args       The arguments to be provided to register_rest_route.
      */
     protected function addEndpoint(
         string $route,
-        string|object|null $component,
-        string|callable $callback,
-        string $method,
+        callable $callback,
+        ?string $method = null,
         array $args = []
         ): void
     {
-        $args['methods'] = $method;
-        $args['callback'] = $this->getCallback($component, $callback);
+        $args['methods'] = $method ??= 'GET';
+        $args['callback'] = $callback;
 
         if (!isset($args['permission_callback'])) {
             $args['permission_callback'] = '__return_true';
@@ -108,30 +106,30 @@ abstract class RestController
      *
      * @return callable A reference to a callable method.
      */
-    private function getCallback(string|object|null $component, string|callable $callback): callable
-    {
-        // If the $callback parameter is callable, use that ignoring the $component argument
-        if (is_callable($callback)) {
-            $callbackFunc = $callback;
-        }
-        else {
-            if (is_object($component)) {
-                $callbackFunc = array($component, $callback);
-            }
-            elseif (is_string($component)) {
-                $callbackFunc = array($component, $callback);
-            }
-            else {
-                $callbackFunc = $callback;
-            }
+    // private function getCallback(string|object|null $component, string|callable $callback): callable
+    // {
+    //     // If the $callback parameter is callable, use that ignoring the $component argument
+    //     if (is_callable($callback)) {
+    //         $callbackFunc = $callback;
+    //     }
+    //     else {
+    //         if (is_object($component)) {
+    //             $callbackFunc = array($component, $callback);
+    //         }
+    //         elseif (is_string($component)) {
+    //             $callbackFunc = array($component, $callback);
+    //         }
+    //         else {
+    //             $callbackFunc = $callback;
+    //         }
 
-            if (!is_callable($callbackFunc)) {
-                throw new \InvalidArgumentException("Invalid callback defined.");
-            }
-        }
+    //         if (!is_callable($callbackFunc)) {
+    //             throw new \InvalidArgumentException("Invalid callback defined.");
+    //         }
+    //     }
 
-        return $callbackFunc;
-    }
+    //     return $callbackFunc;
+    // }
 
     /**
      * Removes the leading and/or trailing slashes from the route.
