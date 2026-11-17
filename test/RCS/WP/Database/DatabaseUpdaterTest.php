@@ -19,11 +19,11 @@ use RCS\Util\ReflectionHelper;
 #[UsesClass(ReflectionHelper::class)]
 final class DatabaseUpdaterTest extends TestCase
 {
-    private PluginInfoInterface|MockObject $pluginInfo;
-    private PluginOptionsInterface|MockObject $pluginOptions;
-    private BgProcessInterface|MockObject $bgProcess;
-    private DatabaseUpdatesInterface|MockObject $dbUpdates;
-    private LoggerInterface|MockObject $logger;
+    private PluginInfoInterface&MockObject $pluginInfo;
+    private PluginOptionsInterface&MockObject $pluginOptions;
+    private BgProcessInterface&MockObject $bgProcess;
+    private DatabaseUpdatesInterface&MockObject $dbUpdates;
+    private LoggerInterface&MockObject $logger;
 
     protected function setUp(): void
     {
