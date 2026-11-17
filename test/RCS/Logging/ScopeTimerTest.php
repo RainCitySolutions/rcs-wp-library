@@ -17,7 +17,7 @@ final class ScopeTimerTest extends TestCase
         $timer->expects(self::once())
               ->method('start');
 
-        new ScopeTimer($logger, $timer, 'Executing...');
+        new ScopeTimer($logger, 'Executing...', $timer);
     }
 
     public function testDestructorLogsWithFormattedMessage(): void
@@ -33,11 +33,11 @@ final class ScopeTimerTest extends TestCase
 
         // Logger should log with formatted message
         $logger->expects(self::once())
-               ->method('info')
+               ->method('debug')
                ->with($expectedMessage);
 
         // Create and immediately destroy ScopeTimer
-        $scopeTimer = new ScopeTimer($logger, $timer, 'Finished work in %s');
+        $scopeTimer = new ScopeTimer($logger, 'Finished work in %s', $timer);
         unset($scopeTimer);
     }
 
@@ -53,10 +53,10 @@ final class ScopeTimerTest extends TestCase
 
         // Even though the string has no "%s", sprintf will append argument safely
         $logger->expects(self::once())
-               ->method('info')
+               ->method('debug')
                ->with($expectedMessage);
 
-        $scopeTimer = new ScopeTimer($logger, $timer, 'Process complete %s');
+        $scopeTimer = new ScopeTimer($logger, 'Process complete %s', $timer);
         unset($scopeTimer);
     }
 }

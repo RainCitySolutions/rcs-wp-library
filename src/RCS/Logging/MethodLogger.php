@@ -4,34 +4,33 @@ namespace RCS\Logging;
 
 use Psr\Log\LoggerInterface;
 
-class MethodLogger
+class MethodLogger extends ScopeTimer
 {
-    private string $method;
-
     /**
      * The $timer parameter is present primary for testing.
      *
      * @param LoggerInterface $logger
-     * @param TimerInterface $timer
+     * @param TimerInterface|null $timer Defaults to \RCS\Logging\Timer if not
+     *      provided.
      */
     public function __construct(
-        private readonly LoggerInterface $logger,
-        private readonly TimerInterface $timer = new Timer()
+        LoggerInterface $logger,
+        ?TimerInterface $timer = null
         )
     {
-        $this->method = $this->getCallingMethodName();
+        $method = $this->getCallingMethodName();
 
-        $this->logger->debug("Entering {$this->method}");
+        parent::__construct($logger, "Exiting {$method} after %s", $timer);
 
-        $this->timer->start();
+        $logger->debug("Entering {$method}");
     }
 
-    public function __destruct()
-    {
-        $this->timer->stop();
+    // public function __destruct()
+    // {
+    //     $this->timer->stop();
 
-        $this->logger->debug("Exiting {$this->method} after {$this->timer->getTime()}");
-    }
+    //     $this->logger->debug("Exiting {$this->method} after {$this->timer->getTime()}");
+    // }
 
     private function getCallingMethodName(): string
     {

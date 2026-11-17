@@ -44,8 +44,7 @@ final class MethodLoggerTest extends TestCase
 
         // Timer expectations
         $timer->expects(self::once())->method('start');
-        $timer->expects(self::once())->method('stop');
-        $timer->method('getTime')->willReturn('1.234 seconds');
+        $timer->expects(self::once())->method('getTime')->willReturn('1.234 seconds');
 
         $loggedMessages = [];
 

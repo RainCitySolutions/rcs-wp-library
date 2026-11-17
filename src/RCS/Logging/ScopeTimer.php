@@ -25,22 +25,27 @@ class ScopeTimer {
     /**
      * Log a timer message when the instance goes out of scope.
      *
-     * @param \Psr\Log\LoggerInterface $logger
-     * @param string $msg
+     * @param LoggerInterface $logger
+     * @param string $msg The message to be written to the log when the
+     *      variable goes out of scope. The string may contain a "%s" which
+     *      will be replaeced with the execution time.
+     * @param TimerInterface|null $timer Defaults to \RCS\Logging\Timer if not
+     *      provided.
      */
     public function __construct(
-        private LoggerInterface $logger,
-        private TimerInterface $timer,
-        private string $msg
+        protected readonly LoggerInterface $logger,
+        private readonly string $msg,
+        protected ?TimerInterface $timer = null
         )
     {
+        $this->timer ??= new Timer();
+
         $this->timer->start();
     }
 
     public function __destruct() {
         $timeStr = $this->timer->getTime();
 
-        $logMsg = sprintf($this->msg, $timeStr);
-        $this->logger->info($logMsg);
+        $this->logger->debug(sprintf($this->msg, $timeStr));
     }
 }
