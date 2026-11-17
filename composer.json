@@ -18,6 +18,7 @@
 		"psr/simple-cache" : "~3.0",
 		"monolog/monolog" : "~3.10",
 		"symfony/cache" : "~7.4",
+		"symfony/clock" : "~7.4",
 		"json-mapper/json-mapper" : "~2.25",
 		"guzzlehttp/guzzle" : "~7.10 || ~8.0",
 		"deliciousbrains/wp-background-processing" : "~1.4",

@@ -2,363 +2,387 @@
 declare(strict_types=1);
 namespace RCS\Logging;
 
-use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\UsesClass;
-use RCS\Util\ReflectionHelper;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use Symfony\Component\Clock\MockClock;
 
-#[CoversClass(\RCS\Logging\Timer::class)]
-#[UsesClass(\RCS\Util\ReflectionHelper::class)]
-class TimerTest extends TestCase
+#[CoversClass(Timer::class)]
+final class TimerTest extends TestCase
 {
-    private const SLEEP_TIME_MICROSECONDS = 550000;
-    private const SLEEP_TIME_SECONDS = self::SLEEP_TIME_MICROSECONDS / 1000000;
-    private const START_PROPERTY = 'start';
-    private const STOP_PROPERTY = 'stop';
-    private const PAUSE_PROPERTY = 'pause';
-    private const ELAPSED_PROPERTY = 'elapsed';
     private const LAP_KEY = 'lapKey';
-    private const SECONDS_TIME_PATTERN = '/^\d\.?\d{0,3} seconds$/';
 
-    public function testCtor_noParam(): void
+    private MockClock $clock;
+
+    protected function setUp(): void
     {
-        $timer = new Timer();
+        $this->clock = new MockClock('2026-01-01 12:00:00');
+    }
 
-        $startVal = $this->getTimerProperty($timer, self::START_PROPERTY);
+    private function timer(bool $start = false): Timer
+    {
+        return new Timer($start, $this->clock);
+    }
 
-        self::assertEquals(floatval(0), $startVal);
+    // ---- construction / start -------------------------------------------
+
+    public function testCtor_noParam_doesNotStart(): void
+    {
+        $timer = new Timer(clock: $this->clock);
+        $this->clock->sleep(1);
+
+        self::assertSame(Timer::NO_TIME_MESSAGE, $timer->getTime());
     }
 
     public function testCtor_doNotStart(): void
     {
-        $timer = new Timer(false);
+        $timer = $this->timer(false);
+        $this->clock->sleep(1);
 
-        $startVal = $this->getTimerProperty($timer, self::START_PROPERTY);
-
-        self::assertEquals(floatval(0), $startVal);
+        self::assertSame(Timer::NO_TIME_MESSAGE, $timer->getTime());
     }
 
     public function testCtor_doStart(): void
     {
+        $timer = $this->timer(true);
+        $this->clock->sleep(2);
+
+        self::assertSame('2 seconds', $timer->getTime());
+    }
+
+    public function testCtor_defaultsToSystemClock(): void
+    {
         $timer = new Timer(true);
 
-        $startVal = $this->getTimerProperty($timer, self::START_PROPERTY);
-
-        self::assertNotEquals(floatval(0), $startVal);
+        self::assertIsString($timer->getTime());
     }
 
     public function testStart(): void
     {
-        $timer = new Timer(false);
+        $timer = $this->timer();
+        $this->clock->sleep(5);   // before start: must not count
+        $timer->start();
+        $this->clock->sleep(2);
 
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::START_PROPERTY));
+        self::assertSame('2 seconds', $timer->getTime());
+    }
+
+    public function testStart_restartClearsPriorState(): void
+    {
+        $timer = $this->timer(true);
+        $this->clock->sleep(3);
+        $timer->lap(self::LAP_KEY);
+        $this->clock->sleep(1);
+        $timer->pause();
+        $timer->stop();
 
         $timer->start();
+        $this->clock->sleep(2);
 
-        self::assertNotEquals(floatval(0), $this->getTimerProperty($timer, self::START_PROPERTY));
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::STOP_PROPERTY));
+        self::assertSame('2 seconds', $timer->getTime());
     }
+
+    // ---- stop -----------------------------------------------------------
 
     public function testStop_notStarted(): void
     {
-        $timer = new Timer(false);
-
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::START_PROPERTY));
-
+        $timer = $this->timer();
         $timer->stop();
 
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::STOP_PROPERTY));
+        self::assertSame(Timer::NO_TIME_MESSAGE, $timer->getTime());
     }
 
     public function testStop_started(): void
     {
-        $timer = new Timer(true);
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-
+        $timer = $this->timer(true);
+        $this->clock->sleep(0.55);
         $timer->stop();
 
-        $startVal = $this->getTimerProperty($timer, self::START_PROPERTY);
-        $stopVal = $this->getTimerProperty($timer, self::STOP_PROPERTY);
-
-        self::assertNotEquals(floatval(0), $startVal);
-        self::assertNotEquals(floatval(0), $stopVal);
-        self::assertGreaterThan($startVal, $stopVal);
-
-        $elapsed = $stopVal - $startVal;
-
-        self::assertGreaterThan(self::SLEEP_TIME_SECONDS - 0.1, $elapsed); // within a tenth before
-        self::assertLessThan(self::SLEEP_TIME_SECONDS + 0.1, $elapsed);    // with a tenth after
+        self::assertSame('0.55 seconds', $timer->getTime());
     }
 
-    public function testStart_restart(): void
+    public function testStop_isIdempotent(): void
     {
-        $timer = new Timer(false);
-
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::START_PROPERTY));
-
-        $timer->start();
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
         $timer->stop();
-        $timer->start();
+        $this->clock->sleep(5);
+        $timer->stop();
 
-        self::assertNotEquals(floatval(0), $this->getTimerProperty($timer, self::START_PROPERTY));
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::STOP_PROPERTY));
+        self::assertSame('1 second', $timer->getTime());
     }
+
+    public function testStop_whilePaused(): void
+    {
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
+        $timer->pause();
+        $this->clock->sleep(10);
+        $timer->stop();
+
+        self::assertSame('1 second', $timer->getTime());
+    }
+
+    // ---- pause / resume -------------------------------------------------
 
     public function testPause_notStarted(): void
     {
-        $timer = new Timer(false);
-
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::START_PROPERTY));
-
+        $timer = $this->timer();
         $timer->pause();
+        $this->clock->sleep(1);
+        $timer->resume();
 
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::STOP_PROPERTY));
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::PAUSE_PROPERTY));
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::ELAPSED_PROPERTY));
-    }
-
-    public function testPause_started(): void
-    {
-        $timer = new Timer(true);
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-
-        $timer->pause();
-
-        $startVal = $this->getTimerProperty($timer, self::START_PROPERTY);
-        $pauseVal = $this->getTimerProperty($timer, self::PAUSE_PROPERTY);
-        $elapsedVal = $this->getTimerProperty($timer, self::ELAPSED_PROPERTY);
-
-        self::assertNotEquals(floatval(0), $startVal);
-        self::assertNotEquals(floatval(0), $pauseVal);
-        self::assertNotEquals(floatval(0), $elapsedVal);
-
-        self::assertGreaterThan($startVal, $pauseVal);
-
-        // Time between start and pause should be just over 1 second
-        self::assertGreaterThanOrEqual(self::SLEEP_TIME_SECONDS, round($elapsedVal, 2));
-        self::assertLessThan(self::SLEEP_TIME_SECONDS * 2, $elapsedVal);
+        self::assertSame(Timer::NO_TIME_MESSAGE, $timer->getTime());
     }
 
     public function testPause_alreadyStopped(): void
     {
-        $timer = new Timer(true);
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
         $timer->stop();
         $timer->pause();
+        $timer->resume();
+        $this->clock->sleep(5);
 
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::PAUSE_PROPERTY));
-        self::assertEquals(floatval(0), $this->getTimerProperty($timer, self::ELAPSED_PROPERTY));
+        self::assertSame('1 second', $timer->getTime());
     }
 
     public function testPause_alreadyPaused(): void
     {
-        $timer = new Timer(true);
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
         $timer->pause();
-
-        $orgPauseVal = $this->getTimerProperty($timer, self::PAUSE_PROPERTY);
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-
+        $this->clock->sleep(2);
         $timer->pause();
+        $this->clock->sleep(2);
 
-        $curPauseVal = $this->getTimerProperty($timer, self::PAUSE_PROPERTY);
-
-        self::assertNotEquals(floatval(0), $orgPauseVal);
-        self::assertNotEquals(floatval(0), $curPauseVal);
-
-        self::assertEquals($orgPauseVal, $curPauseVal);
+        self::assertSame('1 second', $timer->getTime());
     }
 
-    public function testResume_notStartedNotPaused(): void
+    public function testGetTime_whilePausedExcludesPausedTime(): void
     {
-        $timer = new Timer(false);
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
+        $timer->pause();
+        $this->clock->sleep(10);
 
-        $orgStartVal = $this->getTimerProperty($timer, self::START_PROPERTY);
+        self::assertSame('1 second', $timer->getTime());
+    }
 
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-
+    public function testResume_notStarted(): void
+    {
+        $timer = $this->timer();
         $timer->resume();
+        $this->clock->sleep(1);
 
-        $resumeStartVal = $this->getTimerProperty($timer, self::START_PROPERTY);
-
-        self::assertEquals(floatval(0), $orgStartVal);
-        self::assertEquals(floatval(0), $resumeStartVal);
+        self::assertSame(Timer::NO_TIME_MESSAGE, $timer->getTime());
     }
 
     public function testResume_startedNotPaused(): void
     {
-        $timer = new Timer(true);
-
-        $orgStartVal = $this->getTimerProperty($timer, self::START_PROPERTY);
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
         $timer->resume();
+        $this->clock->sleep(1);
 
-        $resumeStartVal = $this->getTimerProperty($timer, self::START_PROPERTY);
+        self::assertSame('2 seconds', $timer->getTime());
+    }
 
-        self::assertNotEquals(floatval(0), $orgStartVal);
-        self::assertNotEquals(floatval(0), $resumeStartVal);
-        self::assertEquals($orgStartVal, $resumeStartVal);
+    public function testResume_afterStop(): void
+    {
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
+        $timer->pause();
+        $timer->stop();
+        $timer->resume();
+        $this->clock->sleep(5);
+
+        self::assertSame('1 second', $timer->getTime());
     }
 
     public function testPauseResumeStop(): void
     {
-        $timer = new Timer(true);
+        $timer = $this->timer(true);
 
-        $orgStartVal = $this->getTimerProperty($timer, self::START_PROPERTY);
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
+        $this->clock->sleep(0.5);
         $timer->pause();
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
+        $this->clock->sleep(10);
         $timer->resume();
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
+        $this->clock->sleep(0.75);
         $timer->stop();
 
-        $startVal = $this->getTimerProperty($timer, self::START_PROPERTY);
-        $stopVal = $this->getTimerProperty($timer, self::STOP_PROPERTY);
-        $elapsedVal = $this->getTimerProperty($timer, self::ELAPSED_PROPERTY);
-
-        $startStopDiff = $stopVal - $startVal;
-
-        self::assertNotEquals(floatval(0), $orgStartVal);
-        self::assertNotEquals(floatval(0), $startVal);
-        self::assertNotEquals(floatval(0), $stopVal);
-        self::assertNotEquals(floatval(0), $elapsedVal);
-
-        self::assertGreaterThan($startVal, $stopVal);
-
-        // Time between initial start and pause should be just over SLEEP_TIME second
-        self::assertGreaterThanOrEqual(self::SLEEP_TIME_SECONDS, round($elapsedVal, 2, PHP_ROUND_HALF_UP));
-        self::assertLessThan(self::SLEEP_TIME_SECONDS * 2, $elapsedVal);
-
-        // Time between resume and stop should be just over SLEEP_TIME second
-        self::assertGreaterThanOrEqual(self::SLEEP_TIME_SECONDS, round($startStopDiff, 1));
-        self::assertLessThan(self::SLEEP_TIME_SECONDS * 2, $startStopDiff);
-
-        // Total elapsed time should be just over SLEEP_TIME * 2 seconds
-        self::assertGreaterThan(self::SLEEP_TIME_SECONDS * 2, $startStopDiff + $elapsedVal);
-        self::assertLessThan(self::SLEEP_TIME_SECONDS * 3, $startStopDiff + $elapsedVal);
+        self::assertSame('1.25 seconds', $timer->getTime());
     }
 
-    public function testTimeToString_noTime(): void
+    public function testMultiplePauseResumeCyclesAccumulate(): void
     {
-        $timer = new Timer();
+        $timer = $this->timer(true);
 
-        $result = ReflectionHelper::invokeObjectMethod(Timer::class, $timer, 'timeToString', 0.0);
+        for ($i = 0; $i < 3; $i++) {
+            $this->clock->sleep(1);
+            $timer->pause();
+            $this->clock->sleep(100);
+            $timer->resume();
+        }
 
-        self::assertEquals(Timer::NO_TIME_MESSAGE, $result);
+        self::assertSame('3 seconds', $timer->getTime());
     }
 
-    public function testTimeToString_mills(): void
-    {
-        $timer = new Timer();
-
-        $testTime = 0.215;
-
-        $result = ReflectionHelper::invokeObjectMethod(Timer::class, $timer, 'timeToString', $testTime);
-
-        self::assertMatchesRegularExpression('/^0.215 seconds$/', $result);
-    }
-
-    public function testTimeToString_seconds(): void
-    {
-        $timer = new Timer();
-
-        $testTime = 5.0;
-
-        $result = ReflectionHelper::invokeObjectMethod(Timer::class, $timer, 'timeToString', $testTime);
-
-        self::assertMatchesRegularExpression('/^5 seconds$/', $result);
-    }
-
-    public function testTimeToString_minutes(): void
-    {
-        $timer = new Timer();
-
-        $testTime = (3.0 * 60) + 24.0;  // 3 minutes, 24 seconds
-
-        $result = ReflectionHelper::invokeObjectMethod(Timer::class, $timer, 'timeToString', $testTime);
-
-        self::assertMatchesRegularExpression('/^3 minutes 24 seconds$/', $result);
-    }
-
-    public function testTimeToString_hours(): void
-    {
-        $timer = new Timer();
-
-        $testTime = (5.0 * 3600) + (27.0 * 60) + 52.671;  // 5 hours 27 minutes 52.671 seconds
-
-        $result = ReflectionHelper::invokeObjectMethod(Timer::class, $timer, 'timeToString', $testTime);
-
-        self::assertMatchesRegularExpression('/^5 hours 27 minutes 52.671 seconds$/', $result);
-    }
+    // ---- getTime --------------------------------------------------------
 
     public function testGetTime_explicitStop(): void
     {
-        $timer = new Timer(true);
-
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-        usleep(self::SLEEP_TIME_MICROSECONDS);
-
+        $timer = $this->timer(true);
+        $this->clock->sleep(1.1);
         $timer->stop();
 
-        $result = $timer->getTime();
-
-        self::assertIsString($result);
-        self::assertMatchesRegularExpression(self::SECONDS_TIME_PATTERN, $result);
+        self::assertSame('1.1 seconds', $timer->getTime());
     }
 
     public function testGetTime_impliedStop(): void
     {
-        $timer = new Timer(true);
+        $timer = $this->timer(true);
+        $this->clock->sleep(0.55);
 
-        usleep(self::SLEEP_TIME_MICROSECONDS);
+        self::assertSame('0.55 seconds', $timer->getTime());
+    }
 
-        $result = $timer->getTime();
+    public function testGetTime_isRepeatable(): void
+    {
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
+        $first = $timer->getTime();
+        $this->clock->sleep(5);
 
-        self::assertIsString($result);
-        self::assertMatchesRegularExpression(self::SECONDS_TIME_PATTERN, $result);
+        self::assertSame($first, $timer->getTime());
+    }
+
+    // ---- laps -----------------------------------------------------------
+
+    public function testLap_notStartedIsIgnored(): void
+    {
+        $timer = $this->timer();
+        $timer->lap(self::LAP_KEY);
+
+        self::assertSame(Timer::NO_TIME_MESSAGE, $timer->getTime());
+    }
+
+    public function testLap_afterStopIsIgnored(): void
+    {
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
+        $timer->stop();
+        $timer->lap(self::LAP_KEY);
+
+        self::assertSame('1 second', $timer->getTime());
     }
 
     public function testGetTime_laps(): void
     {
-        $timer = new Timer(true);
+        $timer = $this->timer(true);
 
-        usleep(self::SLEEP_TIME_MICROSECONDS);
+        $this->clock->sleep(1);
         $timer->lap(self::LAP_KEY);
-        usleep(self::SLEEP_TIME_MICROSECONDS);
+        $this->clock->sleep(2);
         $timer->lap(self::LAP_KEY);
-        usleep(self::SLEEP_TIME_MICROSECONDS);
+        $this->clock->sleep(3);
         $timer->lap(self::LAP_KEY);
-        usleep(self::SLEEP_TIME_MICROSECONDS);
+        $this->clock->sleep(4);   // time after the last lap() is included
         $timer->stop();
+
+        self::assertSame([
+            'lapKey 1' => '1 second',
+            'lapKey 2' => '2 seconds',
+            'lapKey 3' => '3 seconds',
+            'lapKey 4' => '4 seconds',
+            'Total'    => '10 seconds',
+        ], $timer->getTime());
+    }
+
+    public function testGetTime_lapsDefaultKey(): void
+    {
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
+        $timer->lap();
 
         $result = $timer->getTime();
 
-        self::assertIsArray($result);
-        self::assertCount(4, $result);
-
-        foreach($result as $key => $lap) {
-            self::assertMatchesRegularExpression('/^('.self::LAP_KEY.' \d|Total)$/', $key);
-            self::assertMatchesRegularExpression(self::SECONDS_TIME_PATTERN, $lap);
-        }
+        self::assertSame(['Lap 1', 'Lap 2', 'Total'], array_keys($result));
     }
 
-    private function getTimerProperty(Timer $timer, string $property): float
+    public function testGetTime_lapsAreRepeatable(): void
     {
-        return ReflectionHelper::getObjectProperty(Timer::class, $property, $timer);
+        $timer = $this->timer(true);
+        $this->clock->sleep(1);
+        $timer->lap(self::LAP_KEY);
+        $this->clock->sleep(1);
+
+        self::assertSame($timer->getTime(), $timer->getTime());
+    }
+
+    public function testLap_afterPauseDoesNotLeakElapsed(): void
+    {
+        $timer = $this->timer(true);
+
+        $this->clock->sleep(1);
+        $timer->pause();
+        $this->clock->sleep(100);
+        $timer->resume();
+        $this->clock->sleep(2);
+        $timer->lap(self::LAP_KEY);   // lap 1 = 1 + 2
+        $this->clock->sleep(4);
+        $timer->lap(self::LAP_KEY);   // lap 2 = 4
+
+        self::assertSame([
+            'lapKey 1' => '3 seconds',
+            'lapKey 2' => '4 seconds',
+            'lapKey 3' => '0 seconds',
+            'Total'    => '7 seconds',
+        ], $timer->getTime());
+    }
+
+    public function testLap_whilePausedStaysPaused(): void
+    {
+        $timer = $this->timer(true);
+
+        $this->clock->sleep(1);
+        $timer->pause();
+        $timer->lap(self::LAP_KEY);
+        $this->clock->sleep(100);
+
+        $result = $timer->getTime();
+
+        self::assertSame('1 second', $result['lapKey 1']);
+        self::assertSame('1 second', $result['Total']);
+    }
+
+    // ---- formatting (via public API) ------------------------------------
+
+    #[DataProvider('formattingProvider')]
+    public function testGetTime_formatting(float $seconds, string $expected): void
+    {
+        $timer = $this->timer(true);
+        $this->clock->sleep($seconds);
+
+        self::assertSame($expected, $timer->getTime());
+    }
+
+    /** @return array<string, array{float, string}> */
+    public static function formattingProvider(): array
+    {
+        return [
+            'sub-millisecond'     => [0.0004, Timer::NO_TIME_MESSAGE],
+            'millis'              => [0.215, '0.215 seconds'],
+            'one second'          => [1.0, '1 second'],
+            'seconds'             => [5.0, '5 seconds'],
+            'just under a minute' => [59.9996, '1 minute'],
+            'one minute'          => [60.0, '1 minute'],
+            'minutes and seconds' => [204.0, '3 minutes 24 seconds'],
+            'minutes only'        => [180.0, '3 minutes'],
+            'one hour'            => [3600.0, '1 hour'],
+            'hours only'          => [18000.0, '5 hours'],
+            'hours minutes secs'  => [19672.671, '5 hours 27 minutes 52.671 seconds'],
+            'two digit seconds'   => [12.5, '12.5 seconds'],
+        ];
     }
 }

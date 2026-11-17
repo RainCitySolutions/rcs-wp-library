@@ -39,7 +39,7 @@ interface TimerInterface
      *
      * @param string $key Used as the key in the kay value pair array.
      */
-    public function lap($key = ''): void;
+    public function lap(string $key = ''): void;
 
     /**
      * Gets the time(s) in a human readable format.

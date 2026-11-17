@@ -2,6 +2,9 @@
 declare(strict_types=1);
 namespace RCS\Logging;
 
+use Psr\Clock\ClockInterface;
+use Symfony\Component\Clock\NativeClock;
+
 /**
  * Simple PHP script timing class.
  *
@@ -9,182 +12,188 @@ namespace RCS\Logging;
  *
  * @author Blair Cooper
  */
-class Timer implements TimerInterface
+final class Timer implements TimerInterface
 {
-    public const NO_TIME_MESSAGE = 'No time to return.';
+    public const NO_TIME_MESSAGE = '0 seconds';
 
-    private float $start = 0.0;
-    private float $pause = 0.0;
-    private float $stop = 0.0;
+    private const DEFAULT_LAP_KEY = 'Lap';
+
+    private ClockInterface $clock;
+
+    private bool $started = false;
+    private bool $stopped = false;
+
+    /** Clock reading when the current running segment began; null when not running. */
+    private ?float $runningSince = null;
+
+    /** Time accumulated in the current lap (or the whole run if no laps). */
     private float $elapsed = 0.0;
+
+    /** Sum of all completed laps. */
     private float $lapTotalTime = 0.0;
-    /** @var array<string> */
-    private array $laps = array();
+
+    /** @var array<string, string> */
+    private array $laps = [];
     private int $count = 1;
+    private string $lastLapKey = self::DEFAULT_LAP_KEY;
 
     /**
-     * Instantiation method.
-     *
-     * If true is passed then the timer starts immediately. If false is
-     * passed or the argument is omitted the timer is not started and start()
-     * must be called to start the timer.
-     *
-     * @param bool $startNow If set to true the timer immediately starts.
-     *      Defaults to false.
+     * @param bool $startNow If true the timer starts immediately. Defaults to false.
+     * @param ClockInterface|null $clock Time source. Defaults to the system clock.
      */
-    public function __construct(bool $startNow = false)
+    public function __construct(bool $startNow = false, ?ClockInterface $clock = null)
     {
+        $this->clock = $clock ?? new NativeClock();
+
         if ($startNow) {
             $this->start();
         }
     }
 
     /**
-     *
      * {@inheritDoc}
-     * @see \RCS\Logging\TimerInterface::start()
+     *
+     * Starting always begins a fresh run: prior time, pauses and laps are cleared.
      */
     public function start(): void
     {
-        $this->start = $this->getMicroTime();
-        $this->stop = 0.0;  // reset the stop time
+        $this->started = true;
+        $this->stopped = false;
+        $this->elapsed = 0.0;
+        $this->lapTotalTime = 0.0;
+        $this->laps = [];
+        $this->count = 1;
+        $this->lastLapKey = self::DEFAULT_LAP_KEY;
+        $this->runningSince = $this->now();
     }
 
     /**
-     *
      * {@inheritDoc}
-     * @see \RCS\Logging\TimerInterface::stop()
      */
     public function stop(): void
     {
-        // Don't set stop if we haven't started
-        if (0.0 !== $this->start) {
-            $this->stop = $this->getMicroTime();
+        if (!$this->started || $this->stopped) {
+            return;
         }
+
+        $this->elapsed = $this->currentElapsed();
+        $this->runningSince = null;
+        $this->stopped = true;
     }
 
     /**
-     *
      * {@inheritDoc}
-     * @see \RCS\Logging\TimerInterface::pause()
      */
     public function pause(): void
     {
-        // Don't set pause if we haven't started or we have already stopped or we are currently paused
-        if (0.0 !== $this->start && 0.0 === $this->stop && 0.0 === $this->pause) {
-            $this->pause = $this->getMicroTime();
-            $this->elapsed += ($this->pause - $this->start);
+        // Only a running timer can be paused (not unstarted, stopped or already paused).
+        if (null === $this->runningSince) {
+            return;
         }
+
+        $this->elapsed = $this->currentElapsed();
+        $this->runningSince = null;
     }
 
     /**
-     *
      * {@inheritDoc}
-     * @see \RCS\Logging\TimerInterface::resume()
      */
     public function resume(): void
     {
-        if (0.0 !== $this->pause) {
-            $this->start = $this->getMicroTime();
-            $this->pause = 0.0;
+        if ($this->started && !$this->stopped && null === $this->runningSince) {
+            $this->runningSince = $this->now();
         }
     }
 
     /**
-     *
      * {@inheritDoc}
-     * @see \RCS\Logging\TimerInterface::lap()
+     *
+     * Ignored if the timer has not been started or has been stopped. If the
+     * timer is paused, the lap is recorded and the timer stays paused.
      */
-    public function lap($key = ''): void
+    public function lap(string $key = ''): void
     {
-        $key = ($key === '') ? 'Lap' : $key;
+        if (!$this->started || $this->stopped) {
+            return;
+        }
 
-        // Don't reset lap if we haven't started
-        if (0.0 !== $this->start) {
-            $this->stop();
-            $this->lapTotalTime += ($this->stop - $this->start);
-            $this->laps[$key . ' ' . $this->count] = $this->getLapTime();
-            $this->start();
-            $this->count++;
+        $this->lastLapKey = ('' === $key) ? self::DEFAULT_LAP_KEY : $key;
+
+        $lapTime = $this->currentElapsed();
+        $this->lapTotalTime += $lapTime;
+        $this->laps[$this->lastLapKey . ' ' . $this->count++] = $this->timeToString($lapTime);
+
+        // Begin the next lap, preserving the running/paused state.
+        $this->elapsed = 0.0;
+        if (null !== $this->runningSince) {
+            $this->runningSince = $this->now();
         }
     }
 
     /**
      * Gets the time(s) in a human readable format.
      *
-     * If lap() was called, returns an array of times, with an entry for each
-     * lap and an entry for the total time.
+     * Calling this stops the timer. Repeated calls return the same result.
      *
-     * Otherwise returns the total elapsed time.
+     * If lap() was called, returns an array with an entry for each lap, an
+     * entry for the time after the last lap() call, and a "Total" entry.
+     * Otherwise returns the total elapsed time as a string.
      *
-     * @return string|array<string> The elapsed time or an array of times.
+     * @return string|array<string, string>
      */
     public function getTime(): string|array
     {
         $this->stop();
 
-        if (!empty($this->laps)) {
-            $this->laps['Total'] = $this->timeToString($this->lapTotalTime);
-            return $this->laps;
+        if ([] === $this->laps) {
+            return $this->timeToString($this->elapsed);
         }
 
-        return $this->timeToString();
+        // Build the result locally so repeated calls don't mutate state.
+        $result = $this->laps;
+        $result[$this->lastLapKey . ' ' . $this->count] = $this->timeToString($this->elapsed);
+        $result['Total'] = $this->timeToString($this->lapTotalTime + $this->elapsed);
+
+        return $result;
     }
 
-    /**
-     * Get the time.
-     * @return string lap time to lap() function
-     */
-    private function getLapTime(): string
+    private function currentElapsed(): float
     {
-        return $this->timeToString();
-    }
-
-    /**
-     * Get the microtime.
-     * @return float microtime
-     */
-    private function getMicroTime(): float
-    {
-        return microtime(true);
-    }
-
-    /**
-     * Convert the time to a readable string for display or logging.
-     *
-     * @param float $timeSeconds Seconds gathered from the `getTime` function
-     *
-     * @return string time in a displayable string
-     */
-    private function timeToString(?float $timeSeconds = null): string
-    {
-        if (is_null($timeSeconds)) {
-            $timeSeconds = ($this->stop - $this->start) + $this->elapsed;
+        if (null === $this->runningSince) {
+            return $this->elapsed;
         }
-        $timeSeconds = $this->roundMicroTime($timeSeconds);
 
-        // Hours?? Just because we can.
-        $hours   = floor(fdiv($timeSeconds, 60 * 60));
-        $minutes = floor(fmod(fdiv($timeSeconds, 60), 60));
-        $seconds = fmod($timeSeconds, 60);
-        $seconds = round($seconds, 3, PHP_ROUND_HALF_UP);
+        return $this->elapsed + ($this->now() - $this->runningSince);
+    }
 
-        $hours = ($hours == 0) ? '' : $hours . ' hours ';
-        $minutes = ($minutes == 0) ? '' : $minutes . ' minutes ';
-        $seconds = ($seconds == 0) ? '' : $seconds . ' seconds';
-
-        return ($hours == '' && $minutes == '' && $seconds == '') ?
-            self::NO_TIME_MESSAGE :
-            $hours . $minutes . $seconds;
+    private function now(): float
+    {
+        return (float) $this->clock->now()->format('U.u');
     }
 
     /**
-     * Round up the microtime .5 and down .4
-     * @param float $microTime Time from `timeToString` function
-     * @return float time rounded
+     * Convert seconds to a readable string for display or logging.
      */
-    private function roundMicroTime($microTime)
+    private function timeToString(float $timeSeconds): string
     {
-        return round($microTime, 4, PHP_ROUND_HALF_UP);
+        // Round once, up front, so 59.9996 becomes "1 minute" rather than "60 seconds".
+        $timeSeconds = round(max(0.0, $timeSeconds), 3, PHP_ROUND_HALF_UP);
+
+        $hours   = (int) floor($timeSeconds / 3600);
+        $minutes = (int) floor(fmod($timeSeconds, 3600) / 60);
+        $seconds = round(fmod($timeSeconds, 60), 3, PHP_ROUND_HALF_UP);
+
+        $parts = [];
+        if ($hours > 0) {
+            $parts[] = $hours . (1 === $hours ? ' hour' : ' hours');
+        }
+        if ($minutes > 0) {
+            $parts[] = $minutes . (1 === $minutes ? ' minute' : ' minutes');
+        }
+        if ($seconds > 0.0) {
+            $parts[] = $seconds . (1.0 === $seconds ? ' second' : ' seconds');
+        }
+
+        return [] === $parts ? self::NO_TIME_MESSAGE : implode(' ', $parts);
     }
 }
