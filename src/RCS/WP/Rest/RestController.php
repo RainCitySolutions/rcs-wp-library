@@ -1,5 +1,7 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
+
 namespace RCS\WP\Rest;
 
 use JsonMapper\JsonMapperBuilder;
@@ -33,19 +35,9 @@ abstract class RestController
         private string $apiRoute,
         protected readonly LoggerInterface $logger,
         protected ?FactoryRegistry $factoryRegistry = null,
-        )
-    {
+    ) {
         $this->apiRoute = '/' . $this->stripRouteSlashes($apiRoute) . '/';
 
-        $this->initializeInstance();
-    }
-
-    /**
-     * Classes extending this class should call the parent and then call
-     * addEndpoint() for each end point to be provided by the controller.
-     */
-    protected function initializeInstance(): void
-    {
         // Create our own builder so we can include a PropertyMapper with additional class factories
         $builder = JsonMapperBuilder::new()
             ->withPropertyMapper(new PropertyMapper($this->factoryRegistry));
@@ -54,7 +46,7 @@ abstract class RestController
 
         add_action(
             'rest_api_init',
-            function() {
+            function () {
                 foreach ($this->restRoutes as $route) {
                     register_rest_route($route->namespace, $route->route, $route->args);
                 }
@@ -78,8 +70,7 @@ abstract class RestController
         callable $callback,
         ?string $method = null,
         array $args = []
-        ): void
-    {
+    ): void {
         $args['methods'] = $method ??= 'GET';
         $args['callback'] = $callback;
 
@@ -149,7 +140,6 @@ abstract class RestController
 
         return $route;
     }
-
 }
 
 class RestRoute
