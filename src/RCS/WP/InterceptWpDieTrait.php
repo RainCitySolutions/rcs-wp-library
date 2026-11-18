@@ -1,6 +1,8 @@
 <?php
+
 declare(strict_types=1);
-namespace RainCity\WPF;
+
+namespace RCS\WP;
 
 /**
  * Trait to define wp_die method so that when unit tests are running PHP
@@ -18,11 +20,12 @@ trait InterceptWpDieTrait
     use \RCS\Traits\InterceptDieTrait {
         \RCS\Traits\InterceptDieTrait::die as parentDie;
     }
-    
-    public function die(string $msg = '') {
+
+    public function die(string $msg = '')
+    {
         $this->parentDie($msg);
     }
-    
+
     public function wp_die(string|\WP_Error $msg = '', string|int $title = '', string|array|int $args = array())
     {
         if (!defined('PHPUNIT_RUNNING') || !PHPUNIT_RUNNING) {

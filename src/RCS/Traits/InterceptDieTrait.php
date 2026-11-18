@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace RCS\Traits;
 
 /**
@@ -15,7 +17,8 @@ namespace RCS\Traits;
  */
 trait InterceptDieTrait
 {
-    public function die($msg = '') {
+    public function die($msg = '')
+    {
         if (!defined('PHPUNIT_RUNNING') || !PHPUNIT_RUNNING) {
             die($msg);
         }
