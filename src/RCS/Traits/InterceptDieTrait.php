@@ -17,7 +17,7 @@ namespace RCS\Traits;
  */
 trait InterceptDieTrait
 {
-    public function die($msg = '')
+    public function die(string $msg = ''): void
     {
         if (!defined('PHPUNIT_RUNNING') || !PHPUNIT_RUNNING) {
             die($msg);

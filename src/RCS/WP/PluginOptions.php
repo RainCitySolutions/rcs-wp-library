@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace RCS\WP;
 
 use RCS\Traits\SingletonTrait;
@@ -39,7 +41,7 @@ abstract class PluginOptions implements PluginOptionsInterface
                 self::DATABASE_VERSION
             ],
             $this->getOptionKeys()
-            );
+        );
 
         $dbValue = get_option($this->optionName);
 
@@ -89,11 +91,16 @@ abstract class PluginOptions implements PluginOptionsInterface
         return in_array($key, $this->optionKeys);
     }
 
-    public function setValue(string $key, string $value): void
+    public function setValue(string $key, string $value): bool
     {
+        $result = false;
+
         if ($this->isValidKey($key)) {
             $this->values[$key] = $value;
+            $result = true;
         }
+
+        return $result;
     }
 
     public function getValue(string $key): ?string

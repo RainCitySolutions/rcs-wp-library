@@ -1,5 +1,7 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
+
 namespace RCS\WP;
 
 interface PluginOptionsInterface
@@ -8,7 +10,7 @@ interface PluginOptionsInterface
 
     public function isValidKey(string $key): bool;
 
-    public function setValue(string $key, string $value): void;
+    public function setValue(string $key, string $value): bool;
     public function getValue(string $key): ?string;
 
     /**
