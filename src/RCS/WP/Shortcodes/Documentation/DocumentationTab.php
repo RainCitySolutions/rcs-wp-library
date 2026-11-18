@@ -1,10 +1,12 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
+
 namespace RCS\WP\Shortcodes\Documentation;
 
 use RCS\WP\Settings\AdminSettingsTab;
-use RCS\WP\PluginOptions;
 use Psr\Log\LoggerInterface;
+use RCS\WP\WordPressOptions;
 
 final class DocumentationTab extends AdminSettingsTab
 {
@@ -16,7 +18,7 @@ final class DocumentationTab extends AdminSettingsTab
     const DOCUMENTATION_FILTER = 'rcsDocumentationFilter';
 
 
-    public function __construct(PluginOptions $options, LoggerInterface $logger)
+    public function __construct(WordPressOptions $options, LoggerInterface $logger)
     {
         parent::__construct(self::TAB_NAME, $options, $logger);
     }
@@ -32,7 +34,7 @@ final class DocumentationTab extends AdminSettingsTab
             self::OPTIONS_SECTION_SHORTCODES_TITLE,
             function () {}, // NOSONAR
             $pageSlug
-            );
+        );
     }
 
     /**
@@ -46,4 +48,3 @@ final class DocumentationTab extends AdminSettingsTab
         return $input;
     }
 }
-

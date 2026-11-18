@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace RCS\WP\Settings;
 
 use Brain\Monkey;
@@ -13,6 +15,7 @@ use Psr\Log\LoggerInterface;
 use RCS\WP\PluginInfoInterface;
 use PHPUnit\Framework\Attributes\UsesClass;
 use RCS\Util\ReflectionHelper;
+use RCS\WP\WordPressOptions;
 
 #[CoversClass(AdminSettings::class)]
 #[UsesClass(AdminSettingsTab::class)]
@@ -48,7 +51,7 @@ final class AdminSettingsTest extends TestCase
             'test-options',
             'Test Menu',
             $logger
-            );
+        );
     }
 
     #[Test]
@@ -63,25 +66,25 @@ final class AdminSettingsTest extends TestCase
         self::assertSame(1, count($tabs));
     }
 
-//     #[Test]
-//     public function add_settings_initializes_only_active_tab(): void
-//     {
-//         Functions\when('is_admin')->justReturn(true);
+    //     #[Test]
+    //     public function add_settings_initializes_only_active_tab(): void
+    //     {
+    //         Functions\when('is_admin')->justReturn(true);
 
-//         $tab1 = $this->createMock(TestAdminSettingsTab::class);
-//         $tab2 = $this->createMock(TestAdminSettingsTab::class);
+    //         $tab1 = $this->createMock(TestAdminSettingsTab::class);
+    //         $tab2 = $this->createMock(TestAdminSettingsTab::class);
 
-//         $tab1->method('getId')->willReturn('tab1');
-//         $tab2->method('getId')->willReturn('tab2');
+    //         $tab1->method('getId')->willReturn('tab1');
+    //         $tab2->method('getId')->willReturn('tab2');
 
-//         $_GET['tab'] = 'tab2';
+    //         $_GET['tab'] = 'tab2';
 
-//         $tab2->expects(self::once())->method('initSettings')->with('test-options');
-//         $tab1->expects(self::never())->method('initSettings');
+    //         $tab2->expects(self::once())->method('initSettings')->with('test-options');
+    //         $tab1->expects(self::never())->method('initSettings');
 
-//         $settings = $this->createSettings($tab1, $tab2);
-//         $settings->addSettings();
-//     }
+    //         $settings = $this->createSettings($tab1, $tab2);
+    //         $settings->addSettings();
+    //     }
 
     #[Test]
     public function enqueue_scripts_called_for_active_tab(): void
@@ -90,9 +93,9 @@ final class AdminSettingsTest extends TestCase
 
         $tab = new TestAdminSettingsTab(
             'Tab',
-            $this->createMock(\RCS\WP\PluginOptionsInterface::class),
+            $this->createMock(WordPressOptions::class),
             $this->createMock(LoggerInterface::class)
-            );
+        );
 
         $_GET['tab'] = $tab->getId();
 
@@ -110,9 +113,9 @@ final class AdminSettingsTest extends TestCase
 
         $tab = new TestAdminSettingsTab(
             'Tab',
-            $this->createMock(\RCS\WP\PluginOptionsInterface::class),
+            $this->createMock(WordPressOptions::class),
             $this->createMock(LoggerInterface::class)
-            );
+        );
 
         $_GET['tab'] = $tab->getId();
 
@@ -137,9 +140,8 @@ final class AdminSettingsTest extends TestCase
             'test-plugin/plugin.php',
             null,
             'all'
-            );
+        );
 
         self::assertStringContainsString('Settings', $links[0]);
     }
-
 }

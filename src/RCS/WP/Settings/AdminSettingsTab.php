@@ -1,12 +1,14 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
+
 namespace RCS\WP\Settings;
 
 use Psr\Log\LoggerInterface;
 use RCS\WP\Validation\EmailValidator;
 use RCS\WP\Validation\NumberValidator;
 use RCS\WP\Validation\StringValidator;
-use RCS\WP\PluginOptionsInterface;
+use RCS\WP\WordPressOptions;
 
 abstract class AdminSettingsTab
 {
@@ -16,10 +18,9 @@ abstract class AdminSettingsTab
 
     public function __construct(
         protected string $tabName,
-        protected PluginOptionsInterface $options,
+        protected WordPressOptions $options,
         protected LoggerInterface $logger
-        )
-    {
+    ) {
         $this->tabId = $this->generateTabId();
     }
 
@@ -95,17 +96,13 @@ abstract class AdminSettingsTab
      * @param   string  $pluginBaseUrl  The base URL of the plugin.
      * @param   string  $pluginVersion  The version of the plugin.
      */
-    public function onEnqueueScripts(string $pluginName, string $pluginBaseUrl, string $pluginVersion): void
-    {
-    }
+    public function onEnqueueScripts(string $pluginName, string $pluginBaseUrl, string $pluginVersion): void {}
 
     /**
      * Opportunity for tabs to register any additional actions such as Ajax
      * handlers.
      */
-    public function registerActions():void
-    {
-    }
+    public function registerActions(): void {}
 
     /**
      * Retreive the name of the option used to store values from the tab.
@@ -134,7 +131,7 @@ abstract class AdminSettingsTab
             'md5',
             get_class($this),   // actual class name as data
             self::class         // our class name as key
-            );
+        );
     }
 
 
@@ -144,9 +141,7 @@ abstract class AdminSettingsTab
      *  Useful for displaying additional information or providing ancillary
      *  functions such as buttons for invoking Ajax calls.
      */
-    public function renderPostFormData(): void
-    {
-    }
+    public function renderPostFormData(): void {}
 
 
     /**
@@ -164,11 +159,10 @@ abstract class AdminSettingsTab
         string $optionName,
         string $description = '',
         array $attrs = array()
-        ): void
-    {
+    ): void {
         $fieldInfo = $this->getFormFieldInfo($optionName);
 
-        $attrs = array_merge (
+        $attrs = array_merge(
             // these attributes can be overwritten
             array(
                 'size'  => 64,
@@ -183,7 +177,7 @@ abstract class AdminSettingsTab
                 'name'  => $fieldInfo->fieldName,
                 'value' => esc_attr($fieldInfo->fieldValue ?? '')
             )
-            );
+        );
 
         $this->renderInputField($attrs);
         $this->renderDescription($optionName, $description);
@@ -205,11 +199,10 @@ abstract class AdminSettingsTab
         string $optionName,
         string $description = '',
         array $attrs = array()
-        ): void
-    {
+    ): void {
         $fieldInfo = $this->getFormFieldInfo($optionName);
 
-        $attrs = array_merge (
+        $attrs = array_merge(
             // these attributes can be overwritten
             array(
                 'size'  => 64,
@@ -224,7 +217,7 @@ abstract class AdminSettingsTab
                 'name'  => $fieldInfo->fieldName,
                 'value' => esc_attr($fieldInfo->fieldValue ?? '')
             )
-            );
+        );
 
         $this->renderInputField($attrs);
         $this->renderDescription($optionName, $description);
@@ -242,11 +235,10 @@ abstract class AdminSettingsTab
         string $optionName,
         string $description = '',
         array $attrs = array()
-        ): void
-    {
+    ): void {
         $fieldInfo = $this->getFormFieldInfo($optionName);
 
-        $attrs = array_merge (
+        $attrs = array_merge(
             // these attributes can be overwritten
             [],
             $attrs,
@@ -258,21 +250,21 @@ abstract class AdminSettingsTab
                 'name'  => $fieldInfo->fieldName,
                 'value' => true
             )
-            );
+        );
 
-        if (!empty($fieldInfo->fieldValue) && filter_var($fieldInfo->fieldValue, FILTER_VALIDATE_BOOLEAN) ) {
+        if (!empty($fieldInfo->fieldValue) && filter_var($fieldInfo->fieldValue, FILTER_VALIDATE_BOOLEAN)) {
             $attrs['checked'] = null;
         }
 
         // Include a hidden field with the same name and a "false" value so
         // something is always posted back to the server.
         $this->renderInputField(
-            array (
+            array(
                 'type'  => 'hidden',
                 'value' => false,
                 'name'  => $fieldInfo->fieldName
             )
-            );
+        );
 
         $this->renderInputField($attrs);
 
@@ -294,11 +286,11 @@ abstract class AdminSettingsTab
         string $description = '',
         array $matrixEntries = array(),
         array $attrs = array(),
-        bool $showSelectAll = false): void
-    {
+        bool $showSelectAll = false
+    ): void {
         $fieldInfo = $this->getFormFieldInfo($optionName);
 
-        $attrs = array_merge (
+        $attrs = array_merge(
             // these attributes can be overwritten
             [],
             $attrs,
@@ -307,11 +299,11 @@ abstract class AdminSettingsTab
                 'type'  => 'checkbox',
                 'class' => 'checkall_' . $optionName
             )
-            );
+        );
 
         $this->renderDescription($optionName, $description);
 
-        $half = ( count( $matrixEntries ) / 2 );
+        $half = (count($matrixEntries) / 2);
         $ndx    = 0;
         $bColBrkDone = false;
 
@@ -326,8 +318,8 @@ abstract class AdminSettingsTab
                 '" />Select/Clear All</label><br />' . "\r\n";
         }
 
-        foreach ( $matrixEntries as $entry ) {
-            if ( $ndx >= $half && !$bColBrkDone ) {
+        foreach ($matrixEntries as $entry) {
+            if ($ndx >= $half && !$bColBrkDone) {
                 print '</td><td style="width: 50%; text-align: left;">' . "\r\n";
                 if ($showSelectAll) {
                     print '<br />';
@@ -337,12 +329,11 @@ abstract class AdminSettingsTab
 
             if ($entry->isSelected) {
                 $attrs['checked'] = null;
-            }
-            else {
+            } else {
                 unset($attrs['checked']);
             }
-            $attrs['id']    = $fieldInfo->fieldId.'['.$entry->value.']';
-            $attrs['name']  = $fieldInfo->fieldName.'['.$entry->value.']';
+            $attrs['id']    = $fieldInfo->fieldId . '[' . $entry->value . ']';
+            $attrs['name']  = $fieldInfo->fieldName . '[' . $entry->value . ']';
             $attrs['value'] = $entry->value;
 
             print '<label>';
@@ -353,7 +344,6 @@ abstract class AdminSettingsTab
         }
         print '</td></tr>' . "\r\n";
         print '</table>' . "\r\n";
-
     }
 
 
@@ -372,11 +362,10 @@ abstract class AdminSettingsTab
         string $optionName,
         string $description = '',
         array $attrs = array()
-        ): void
-    {
+    ): void {
         $fieldInfo = $this->getFormFieldInfo($optionName);
 
-        $attrs = array_merge (
+        $attrs = array_merge(
             // these attributes can be overwritten
             array(
                 'size'      => 10,
@@ -392,7 +381,7 @@ abstract class AdminSettingsTab
                 'value'     => esc_attr($fieldInfo->fieldValue ?? ''),
                 'required'  => null
             )
-            );
+        );
 
         $this->renderInputField($attrs);
         $this->renderDescription($optionName, $description);
@@ -410,8 +399,7 @@ abstract class AdminSettingsTab
         string $optionName,
         string $description = '',
         int $rows = 10
-        ): void
-    {
+    ): void {
         $fieldInfo = $this->getFormFieldInfo($optionName);
 
         wp_editor(
@@ -422,7 +410,7 @@ abstract class AdminSettingsTab
                 'media_buttons' => false,
                 'textarea_rows' => $rows
             )
-            );
+        );
 
         $this->renderDescription($optionName, $description);
     }
@@ -444,11 +432,10 @@ abstract class AdminSettingsTab
         string $description = '',
         bool $allowMultiple = false,
         array $attrs = array()
-        ): void
-    {
+    ): void {
         $fieldInfo = $this->getFormFieldInfo($optionName);
 
-        $attrs = array_merge (
+        $attrs = array_merge(
             // these attributes can be overwritten
             array(
                 'size'  => $allowMultiple ? 80 : 40,
@@ -462,7 +449,7 @@ abstract class AdminSettingsTab
                 'name'  => $fieldInfo->fieldName,
                 'value' => esc_attr($fieldInfo->fieldValue ?? '')
             )
-            );
+        );
 
         if ($allowMultiple) {
             $attrs['multiple'] = true;
@@ -489,11 +476,10 @@ abstract class AdminSettingsTab
         string $optionName,
         string $description = '',
         array $attrs = array()
-        ): void
-    {
+    ): void {
         $fieldInfo = $this->getFormFieldInfo($optionName);
 
-        $attrs = array_merge (
+        $attrs = array_merge(
             // these attributes can be overwritten
             array(
                 'size'  => 90,
@@ -508,7 +494,7 @@ abstract class AdminSettingsTab
                 'name'  => $fieldInfo->fieldName,
                 'value' => esc_attr($fieldInfo->fieldValue ?? '')
             )
-            );
+        );
 
         $this->renderInputField($attrs);
         $this->renderDescription($optionName, $description);
@@ -523,7 +509,7 @@ abstract class AdminSettingsTab
     private function renderInputField(array $attrs): void
     {
         print '<input ';
-        array_walk($attrs, function($value, $key) {
+        array_walk($attrs, function ($value, $key) {
             print $key;
             if (isset($value)) {
                 print '="' . $value . '"';
@@ -531,7 +517,7 @@ abstract class AdminSettingsTab
 
             print ' ';
         });
-            print '/>';
+        print '/>';
     }
 
 
@@ -555,8 +541,7 @@ abstract class AdminSettingsTab
 
         if ($validator->isValid($value)) {
             $this->options->setValue($key, trim($value));
-        }
-        else {
+        } else {
             $validator->addError($errMsg);
         }
     }
@@ -567,8 +552,7 @@ abstract class AdminSettingsTab
 
         if ($validator->isValid($value)) {
             $this->options->setValue($key, trim($value));
-        }
-        else {
+        } else {
             $validator->addError($errMsg);
         }
     }
@@ -603,7 +587,7 @@ abstract class AdminSettingsTab
                 $key,
                 sprintf("%s[%s]", $this->getOptionName(), $key),
                 $this->options->getValue($key) ?? ''
-                );
+            );
         }
 
         return $result;

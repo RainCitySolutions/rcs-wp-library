@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace RCS\WP\Settings;
 
 use Brain\Monkey;
@@ -10,11 +12,11 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\UsesClass;
 use Psr\Log\LoggerInterface;
-use RCS\WP\PluginOptionsInterface;
 use RCS\WP\Validation\BaseValidator;
 use RCS\WP\Validation\EmailValidator;
 use RCS\WP\Validation\NumberValidator;
 use RCS\WP\Validation\StringValidator;
+use RCS\WP\WordPressOptions;
 
 #[CoversClass(AdminSettingsTab::class)]
 #[UsesClass(FormFieldInfo::class)]
@@ -41,9 +43,9 @@ final class AdminSettingsTabTest extends TestCase
         Monkey\tearDown();
     }
 
-    private function makeTab(?PluginOptionsInterface $options = null, ?callable $optionsExpectation = null): TestAdminSettingsTab
+    private function makeTab(?WordPressOptions $options = null, ?callable $optionsExpectation = null): TestAdminSettingsTab
     {
-        $options ??= $this->createMock(PluginOptionsInterface::class);
+        $options ??= $this->createMock(WordPressOptions::class);
         $logger = $this->createMock(LoggerInterface::class);
 
         if (!is_null($optionsExpectation)) {
@@ -76,11 +78,11 @@ final class AdminSettingsTabTest extends TestCase
 
         $called = false;
         Functions\expect('register_setting')
-        ->once()
-        ->andReturnUsing(function ($slug, $name, $args) use (&$called) {
-            $called = is_callable($args['sanitize_callback']);
-            return true;
-        });
+            ->once()
+            ->andReturnUsing(function ($slug, $name, $args) use (&$called) {
+                $called = is_callable($args['sanitize_callback']);
+                return true;
+            });
 
         $tab->exposeInit('plugin_page');
         $this->assertTrue($called, 'register_setting should receive sanitize callback');
@@ -101,7 +103,7 @@ final class AdminSettingsTabTest extends TestCase
     #[Test]
     public function it_renders_text_field_html(): void
     {
-        $options = $this->createMock(PluginOptionsInterface::class);
+        $options = $this->createMock(WordPressOptions::class);
         $options->method('isValidKey')->willReturn(true);
         $options->method('getOptionName')->willReturn('opts');
         $options->method('getValue')->willReturn('abc');
@@ -118,7 +120,7 @@ final class AdminSettingsTabTest extends TestCase
     #[Test]
     public function getFormFieldInfo_returns_null_if_invalid_key(): void
     {
-        $options = $this->createMock(PluginOptionsInterface::class);
+        $options = $this->createMock(WordPressOptions::class);
         $options->method('isValidKey')->willReturn(false);
         $tab = $this->makeTab($options);
 
@@ -129,7 +131,7 @@ final class AdminSettingsTabTest extends TestCase
     #[Test]
     public function getFormFieldInfo_returns_form_field_info_if_valid(): void
     {
-        $options = $this->createMock(PluginOptionsInterface::class);
+        $options = $this->createMock(WordPressOptions::class);
         $options->method('isValidKey')->willReturn(true);
         $options->method('getOptionName')->willReturn('settings');
         $options->method('getValue')->willReturn('123');
@@ -144,7 +146,7 @@ final class AdminSettingsTabTest extends TestCase
     #[Test]
     public function it_renders_checkbox_matrix_field(): void
     {
-        $options = $this->createMock(PluginOptionsInterface::class);
+        $options = $this->createMock(WordPressOptions::class);
         $options->method('isValidKey')->willReturn(true);
         $options->method('getOptionName')->willReturn('opts');
         $options->method('getValue')->willReturn('1');
@@ -172,131 +174,131 @@ final class AdminSettingsTabTest extends TestCase
         $this->assertStringContainsString('<table', $html);
     }
 
-//     #[Test]
-//     public function validate_string_value_sets_option_when_valid(): void
-//     {
-//         $tab = $this->makeTab(
-//             null,
-//             function (PluginOptionsInterface $options): void {
-//                 $options
-//                 ->expects(self::once())
-//                 ->method('setValue')
-//                 ->with('username', 'John');
-//             }
-//             );
+    //     #[Test]
+    //     public function validate_string_value_sets_option_when_valid(): void
+    //     {
+    //         $tab = $this->makeTab(
+    //             null,
+    //             function (PluginOptionsInterface $options): void {
+    //                 $options
+    //                 ->expects(self::once())
+    //                 ->method('setValue')
+    //                 ->with('username', 'John');
+    //             }
+    //             );
 
-//         $tab->validateString(
-//             'username',
-//             ' John ',
-//             'test-page',
-//             'Username'
-//             );
-//     }
+    //         $tab->validateString(
+    //             'username',
+    //             ' John ',
+    //             'test-page',
+    //             'Username'
+    //             );
+    //     }
 
-//     #[Test]
-//     public function validate_string_value_does_not_set_option_when_invalid(): void
-//     {
-//         $tab = $this->makeTab(
-//             null,
-//             function (PluginOptionsInterface $options): void {
-//                 $options
-//                 ->expects(self::never())
-//                 ->method('setValue');
-//             }
-//             );
+    //     #[Test]
+    //     public function validate_string_value_does_not_set_option_when_invalid(): void
+    //     {
+    //         $tab = $this->makeTab(
+    //             null,
+    //             function (PluginOptionsInterface $options): void {
+    //                 $options
+    //                 ->expects(self::never())
+    //                 ->method('setValue');
+    //             }
+    //             );
 
-//         $tab->validateString(
-//             'username',
-//             '',
-//             'test-page',
-//             'Username'
-//             );
-//     }
+    //         $tab->validateString(
+    //             'username',
+    //             '',
+    //             'test-page',
+    //             'Username'
+    //             );
+    //     }
 
-//     #[Test]
-//     public function validate_email_sets_option_when_valid(): void
-//     {
-//         $tab = $this->makeTab(
-//             null,
-//             function (PluginOptionsInterface $options): void {
-//                 $options
-//                 ->expects(self::once())
-//                 ->method('setValue')
-//                 ->with('email', 'test@example.com');
-//             }
-//             );
+    //     #[Test]
+    //     public function validate_email_sets_option_when_valid(): void
+    //     {
+    //         $tab = $this->makeTab(
+    //             null,
+    //             function (PluginOptionsInterface $options): void {
+    //                 $options
+    //                 ->expects(self::once())
+    //                 ->method('setValue')
+    //                 ->with('email', 'test@example.com');
+    //             }
+    //             );
 
-//         $tab->validateEmail(
-//             'email',
-//             ' test@example.com ',
-//             'test-page',
-//             'Email'
-//             );
-//     }
+    //         $tab->validateEmail(
+    //             'email',
+    //             ' test@example.com ',
+    //             'test-page',
+    //             'Email'
+    //             );
+    //     }
 
-//     #[Test]
-//     public function validate_email_does_not_set_option_when_invalid(): void
-//     {
-//         $tab = $this->makeTab(
-//             null,
-//             function (PluginOptionsInterface $options): void {
-//                 $options
-//                 ->expects(self::never())
-//                 ->method('setValue');
-//             }
-//             );
+    //     #[Test]
+    //     public function validate_email_does_not_set_option_when_invalid(): void
+    //     {
+    //         $tab = $this->makeTab(
+    //             null,
+    //             function (PluginOptionsInterface $options): void {
+    //                 $options
+    //                 ->expects(self::never())
+    //                 ->method('setValue');
+    //             }
+    //             );
 
-//         $tab->validateEmail(
-//             'email',
-//             'not-an-email',
-//             'test-page',
-//             'Email'
-//             );
-//     }
+    //         $tab->validateEmail(
+    //             'email',
+    //             'not-an-email',
+    //             'test-page',
+    //             'Email'
+    //             );
+    //     }
 
-//     #[Test]
-//     public function validate_numeric_sets_option_when_within_range(): void
-//     {
-//         $tab = $this->makeTab(
-//             null,
-//             function (PluginOptionsInterface $options): void {
-//                 $options
-//                 ->expects(self::once())
-//                 ->method('setValue')
-//                 ->with('limit', '10');
-//             }
-//             );
+    //     #[Test]
+    //     public function validate_numeric_sets_option_when_within_range(): void
+    //     {
+    //         $tab = $this->makeTab(
+    //             null,
+    //             function (PluginOptionsInterface $options): void {
+    //                 $options
+    //                 ->expects(self::once())
+    //                 ->method('setValue')
+    //                 ->with('limit', '10');
+    //             }
+    //             );
 
-//         $tab->validateNumber(
-//             'limit',
-//             '10',
-//             'test-page',
-//             'Limit',
-//             1,
-//             20
-//             );
-//     }
+    //         $tab->validateNumber(
+    //             'limit',
+    //             '10',
+    //             'test-page',
+    //             'Limit',
+    //             1,
+    //             20
+    //             );
+    //     }
 
-//    #[Test]
-//     public function validate_numeric_does_not_set_option_when_out_of_range(): void
-//     {
-//         $tab = $this->makeTab(
-//             null,
-//             function (PluginOptionsInterface $options): void {
-//                 $options
-//                 ->expects(self::never())
-//                 ->method('setValue');
-//             }
-//             );
+    //    #[Test]
+    //     public function validate_numeric_does_not_set_option_when_out_of_range(): void
+    //     {
+    //         $tab = $this->makeTab(
+    //             null,
+    //             function (PluginOptionsInterface $options): void {
+    //                 $options
+    //                 ->expects(self::never())
+    //                 ->method('setValue');
+    //             }
+    //             );
 
-//         $tab->validateNumber(
-//             'limit',
-//             '100',
-//             'test-page',
-//             'Limit',
-//             1,
-//             20,
-//             'Out of range'
-//             );
-//     }
+    //         $tab->validateNumber(
+    //             'limit',
+    //             '100',
+    //             'test-page',
+    //             'Limit',
+    //             1,
+    //             20,
+    //             'Out of range'
+    //             );
+    //     }
 }

@@ -1,11 +1,13 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
+
 namespace RCS\WP\Database;
 
 use RCS\WP\PluginInfoInterface;
-use RCS\WP\PluginOptionsInterface;
 use RCS\WP\BgProcess\BgProcessInterface;
 use Psr\Log\LoggerInterface;
+use RCS\WP\WordPressOptions;
 
 /**
  * This class handles any updates and/or changes to the database that might
@@ -13,17 +15,22 @@ use Psr\Log\LoggerInterface;
  */
 class DatabaseUpdater
 {
+    public const DATABASE_VERSION = 'dbVersion';
+
     private string $dbVersion;
     private static string $dbUpgradeSemaphoreFile;
 
     public function __construct(
         private PluginInfoInterface $pluginInfo,
-        private PluginOptionsInterface $pluginOptions,
+        private WordPressOptions $options,
         private BgProcessInterface $bgProcess,
         private DatabaseUpdatesInterface $dbUpdates,
         private LoggerInterface $logger
-        )
-    {
+    ) {
+        if (!$options->isValidKey(self::DATABASE_VERSION)) {
+            throw new \InvalidArgumentException('Options class missing ' . self::DATABASE_VERSION . ' option');
+        }
+
         if (!isset(self::$dbUpgradeSemaphoreFile)) {
             self::$dbUpgradeSemaphoreFile = get_temp_dir() . $pluginInfo->getSlug() . '_dbUpdateSemaphore.txt';
         }
@@ -38,7 +45,7 @@ class DatabaseUpdater
      */
     public function privUpgradeDatabase(): void
     {
-        $this->dbVersion = $this->pluginOptions->getDatabaseVersion();
+        $this->dbVersion = $this->options->getValue(self::DATABASE_VERSION);
 
         /*
          * If the version is the default, assume this is the first time this
@@ -46,22 +53,22 @@ class DatabaseUpdater
          * be new and insync with the current plugin version.
          */
         if (empty($this->dbVersion)) {
-            $this->pluginOptions->setDatabaseVersion($this->pluginInfo->getVersion());
-        }
-        else {
+            $this->options->setValue(self::DATABASE_VERSION, $this->pluginInfo->getVersion());
+        } else {
             // Check if the plugin version is later than the database version
             // Note: Just because the plugin has been updated, it doesn't
             //      mean there are upgrades to be performed.
-            if ($this->isUpgradeNeeded($this->pluginInfo->getVersion()) &&
-                $this->getDbUpgradeSemaphore())
-            {
+            if (
+                $this->isUpgradeNeeded($this->pluginInfo->getVersion()) &&
+                $this->getDbUpgradeSemaphore()
+            ) {
                 $this->logger->info('Running db upgrades');
 
                 try {
                     $this->doDbUpgrades($this->dbUpdates->getDatabaseUpgrades());
 
                     // Save that the database is up to date with the current plugin version
-                    $this->pluginOptions->setDatabaseVersion($this->pluginInfo->getVersion());
+                    $this->options->setValue(self::DATABASE_VERSION, $this->pluginInfo->getVersion());
 
                     $this->logger->info('Finished db upgrades');
                 } finally {
@@ -150,7 +157,7 @@ class DatabaseUpdater
                 $this->logger->info('Finished upgrading database to version {ver}.', $logCtx);
 
                 // Save that update to this version is complete
-                $this->pluginOptions->setDatabaseVersion($version);
+                $this->options->setValue(self::DATABASE_VERSION, $version);
             }
         }
 

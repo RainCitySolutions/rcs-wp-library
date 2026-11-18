@@ -1,0 +1,145 @@
+<?php
+
+declare(strict_types=1);
+
+namespace RCS\WP;
+
+final class LastLoginManager
+{
+    const COLUMN_NAME = 'raincity_wpf-last-login';
+    const LAST_LOGIN_META_TAG = 'last_login';
+
+    public function __construct(
+        private readonly string $textDomain
+    ) {
+        add_action('wp_login', [$this, 'wpLoginAction'], 10, 2);
+        add_action('user_register', [$this, 'userRegisterAction']);
+
+        if (is_admin()) {
+            add_filter('manage_users_columns', [$this, 'addLastLoginColumn']);
+            add_filter('wpmu_users_columns', [$this, 'addLastLoginColumn']);
+            add_filter('manage_users_custom_column', [$this, 'manageUsersCustomColumn'], 10, 3);
+            add_filter('manage_users_sortable_columns', [$this, 'markColumnSortable']);
+            add_filter('manage_users-network_sortable_columns', [$this, 'markColumnSortable']);
+
+            add_action('admin_print_styles-users.php', [$this, 'formatLastLoginColumn']);
+            add_action('admin_print_styles-site-users.php', [$this, 'formatLastLoginColumn']);
+            add_action('pre_get_users', [$this, 'preGetUsersAction']);
+        }
+    }
+
+    /**
+     * wp_login action hook - Set the user's last login time to now.
+     *
+     * @param string $userLogin The user's login name.
+     * @param \WP_User $wpUser WordPress User object
+     */
+    public function wpLoginAction(string $userLogin, \WP_User $wpUser): void
+    {
+        update_user_meta($wpUser->ID, self::LAST_LOGIN_META_TAG, time());
+    }
+
+    /**
+     * user_register action hook - Set the user's last login time to zero.
+     *
+     * @param int $userId The user ID.
+     */
+    public function userRegisterAction(int $userId): void
+    {
+        update_user_meta($userId, self::LAST_LOGIN_META_TAG, 0);
+    }
+
+    /**
+     * manage_users_columns and wpmu_users_columns filter hook
+     *
+     * Adds the last login column to the admin user list.
+     *
+     * @param  array<string, string> $columns The default columns.
+     *
+     * @return array<string, string>
+     */
+    public function addLastLoginColumn(array $columns): array
+    {
+        $columns[self::COLUMN_NAME] = __('Last Login', $this->textDomain);
+
+        return $columns;
+    }
+
+
+    /**
+     * admin_print_styles-users.php and admin_print_styles-site-users.php action hook
+     *
+     * Defines the width of the last login column
+     */
+    public function formatLastLoginColumn(): void
+    {
+?>
+        <style type="text/css">
+            .column-<?php echo self::COLUMN_NAME; ?> {
+                width: 15%;
+            }
+        </style>
+<?php
+    }
+
+    /**
+     * manage_users_custom_column filter hook
+     *
+     * Displays the last login value
+     *
+     * @param string $output The value to be output by default.
+     * @param string $columnName The name of the column.
+     * @param int    $userId The user's id.
+     *
+     * @return string The last login date if available otherwise 'Never'.
+     */
+    public function manageUsersCustomColumn(string $output, string $columnName, int $userId): string
+    {
+        if (self::COLUMN_NAME === $columnName) {
+            $output = __('Never', $this->textDomain);
+            $lastLogin = (int) get_user_meta($userId, self::LAST_LOGIN_META_TAG, true);
+
+            if ($lastLogin) {
+                $output  = date_i18n(get_option('date_format'), $lastLogin);
+            }
+        }
+
+        return $output;
+    }
+
+    /**
+     * manage_*_sortable_columns filter hook
+     *
+     * Mark the column as sortable.
+     *
+     * @param  array<string, string> $columns User table columns.
+     *
+     * @return array<string, string>
+     */
+    public function markColumnSortable(array $columns): array
+    {
+        $columns[self::COLUMN_NAME] = self::COLUMN_NAME;
+
+        return $columns;
+    }
+
+    /**
+     * pre_get_user action hook
+     *
+     * Handle ordering by last login.
+     *
+     * @param  \WP_User_Query $userQuery Request arguments.
+     */
+    public function preGetUsersAction(\WP_User_Query $userQuery): void
+    {
+        if (isset($userQuery->query_vars['orderby']) && self::COLUMN_NAME === $userQuery->query_vars['orderby']) {
+            $userQuery->query_vars = array_merge(
+                $userQuery->query_vars,
+                array(
+                    'meta_key' => self::COLUMN_NAME,
+                    'orderby'  => 'meta_value_num',
+                )
+            );
+        }
+    }
+}

@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace RCS\WP\Database;
 
 use Brain\Monkey;
@@ -9,18 +11,18 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use Psr\Log\LoggerInterface;
 use RCS\WP\PluginInfoInterface;
-use RCS\WP\PluginOptionsInterface;
 use RCS\WP\BgProcess\BgProcessInterface;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use RCS\Util\ReflectionHelper;
+use RCS\WP\WordPressOptions;
 
 #[CoversClass(DatabaseUpdater::class)]
 #[UsesClass(ReflectionHelper::class)]
 final class DatabaseUpdaterTest extends TestCase
 {
     private PluginInfoInterface&MockObject $pluginInfo;
-    private PluginOptionsInterface&MockObject $pluginOptions;
+    private WordPressOptions&MockObject $options;
     private BgProcessInterface&MockObject $bgProcess;
     private DatabaseUpdatesInterface&MockObject $dbUpdates;
     private LoggerInterface&MockObject $logger;
@@ -29,11 +31,11 @@ final class DatabaseUpdaterTest extends TestCase
     {
         Monkey\setUp();
 
-        $this->pluginInfo     = $this->createMock(PluginInfoInterface::class);
-        $this->pluginOptions  = $this->createMock(PluginOptionsInterface::class);
-        $this->bgProcess      = $this->createMock(BgProcessInterface::class);
-        $this->dbUpdates      = $this->createMock(DatabaseUpdatesInterface::class);
-        $this->logger         = $this->createMock(LoggerInterface::class);
+        $this->pluginInfo   = $this->createMock(PluginInfoInterface::class);
+        $this->options      = $this->createMock(WordPressOptions::class);
+        $this->bgProcess    = $this->createMock(BgProcessInterface::class);
+        $this->dbUpdates    = $this->createMock(DatabaseUpdatesInterface::class);
+        $this->logger       = $this->createMock(LoggerInterface::class);
 
         Functions\expect('get_temp_dir')
             ->andReturn(sys_get_temp_dir() . DIRECTORY_SEPARATOR);
@@ -41,6 +43,11 @@ final class DatabaseUpdaterTest extends TestCase
         Functions\expect('add_action')
             ->once()
             ->with('init', \Mockery::type('array'), 0);
+
+        $this->options
+            ->method('isValidKey')
+            ->with(DatabaseUpdater::DATABASE_VERSION)
+            ->willReturn(true);
     }
 
     protected function tearDown(): void
@@ -58,22 +65,23 @@ final class DatabaseUpdaterTest extends TestCase
             ->method('getVersion')
             ->willReturn('2.0.0');
 
-        $this->pluginOptions
-            ->method('getDatabaseVersion')
+        $this->options
+            ->method('getValue')
+            ->with(DatabaseUpdater::DATABASE_VERSION)
             ->willReturn('');
 
-        $this->pluginOptions
+        $this->options
             ->expects(self::once())
-            ->method('setDatabaseVersion')
-            ->with('2.0.0');
+            ->method('setValue')
+            ->with(DatabaseUpdater::DATABASE_VERSION, '2.0.0');
 
         $updater = new DatabaseUpdater(
             $this->pluginInfo,
-            $this->pluginOptions,
+            $this->options,
             $this->bgProcess,
             $this->dbUpdates,
             $this->logger
-            );
+        );
 
         $updater->privUpgradeDatabase();
     }
@@ -88,9 +96,10 @@ final class DatabaseUpdaterTest extends TestCase
             ->method('getVersion')
             ->willReturn('2.0.0');
 
-        $this->pluginOptions
-        ->method('getDatabaseVersion')
-        ->willReturn('1.0.0');
+        $this->options
+            ->method('getValue')
+            ->with(DatabaseUpdater::DATABASE_VERSION)
+            ->willReturn('1.0.0');
 
         $this->dbUpdates
             ->method('getDatabaseUpgrades')
@@ -101,7 +110,7 @@ final class DatabaseUpdaterTest extends TestCase
 
         // Expect logger calls for semaphore + upgrade steps
         $this->logger->expects(self::atLeastOnce())->method('info');
-        $this->pluginOptions->expects(self::exactly(3))->method('setDatabaseVersion');
+        $this->options->expects(self::exactly(3))->method('setValue')->with(DatabaseUpdater::DATABASE_VERSION);
         $this->bgProcess->expects(self::once())->method('dispatch');
 
         // Create temp semaphore file expectation
@@ -112,11 +121,11 @@ final class DatabaseUpdaterTest extends TestCase
 
         $updater = new DatabaseUpdater(
             $this->pluginInfo,
-            $this->pluginOptions,
+            $this->options,
             $this->bgProcess,
             $this->dbUpdates,
             $this->logger
-            );
+        );
 
         $updater->privUpgradeDatabase();
     }
