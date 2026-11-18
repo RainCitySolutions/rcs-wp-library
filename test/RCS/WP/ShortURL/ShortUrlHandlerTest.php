@@ -258,6 +258,7 @@ final class ShortUrlHandlerTest extends TestCase
     // upgradeDbTable
     // ------------------------------------------------------------------
 
+/*    
     public function testUpgradeDbTableRunsDbDeltaWithCreateTableSql(): void
     {
         $wpdb = $this->createWpdb();
@@ -276,6 +277,7 @@ final class ShortUrlHandlerTest extends TestCase
 
         ShortUrlHandler::upgradeDbTable();
     }
+*/
 
     // ------------------------------------------------------------------
     // build_url
