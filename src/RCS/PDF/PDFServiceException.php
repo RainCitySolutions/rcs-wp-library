@@ -1,11 +1,13 @@
 <?php
+
 declare(strict_types=1);
+
 namespace RCS\PDF;
 
 /**
  */
 class PDFServiceException
-    extends \Exception
+extends \Exception
 {
     const INVALID_URL_ERROR = -1;
     const GENERATION_ERROR = -2;

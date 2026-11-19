@@ -1,15 +1,17 @@
 <?php
-declare (strict_types=1);
+
+declare(strict_types=1);
+
 namespace RCS\PDF;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
-use Psr\Http\Client\ClientInterface;
-use Psr\Http\Message\ResponseInterface;
-use Psr\Log\LoggerInterface;
 use GuzzleHttp\Psr7\MultipartStream;
 use GuzzleHttp\Psr7\Utils;
+use Psr\Http\Client\ClientInterface;
 use Psr\Http\Client\ClientExceptionInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * Class to support sending requests to the PDF Service.
@@ -19,18 +21,16 @@ class PDFService
     const EXPECTED_VERBS = 'POST,OPTIONS';
     const INVALID_URL_ERROR = 'Invalid service URL provided.';
 
-    protected string $svcUrl;
-
-    private ClientInterface $httpClient;
+    private string $svcUrl;
 
     /**
      * Constructs a PDF Serivce instance.
      *
      * If the $httpClient parameter is not set the Guzzle HTTP Client will be
      * used by default. See {@link https://docs.guzzlephp.org/en/stable/}
-
      *
      * @param string $svcUrl The URL to the PDF Web Service
+     * @param LoggerInterface $logger
      * @param ClientInterface $httpClient (Optional) An HTTP Client to be used for
      *      requests. Can be overridden later by a call to {@see PDFService::setHttpClient()}.
      * @param float $timeout Timeout for the default HTTP client. Ignored if
@@ -41,14 +41,11 @@ class PDFService
      */
     public function __construct(
         string $svcUrl,
-        private LoggerInterface $logger,
-        ?ClientInterface $httpClient = null,
+        private readonly LoggerInterface $logger,
+        private ?ClientInterface $httpClient = null,
         float $timeout = 30.0
-        )
-    {
-        $this->logger = $logger;
-
-        $this->httpClient = $httpClient ?? self::getDefaultHttpClient($timeout);
+    ) {
+        $this->httpClient ??= self::getDefaultHttpClient($timeout);
 
         if ($this->isValidServiceUrl($svcUrl)) {
             $this->svcUrl = $svcUrl;
@@ -104,28 +101,26 @@ class PDFService
 
                     if (!empty($verbs) && self::EXPECTED_VERBS === $verbs[0]) {
                         $isValid = true;
-                    }
-                    else {
+                    } else {
                         $this->logger->warning(
                             'Necessary HTTP verbs not supported. Response was {verbs}',
                             array('verbs' => $verbs)
-                            );
+                        );
                     }
-                }
-                else {
+                } else {
                     $this->logger->warning(
                         'OPTIONS request returned {errorCode}: {reason}',
                         array(
                             'errorCode' => $response->getStatusCode(),
                             'reason' => $response->getReasonPhrase()
                         )
-                        );
+                    );
                 }
             } catch (\Exception $e) {
                 $this->logger->warning(
                     'Unable to retrieve Options from URL {url}, {error}',
                     array('url' => $url, 'error' => $e->getMessage())
-                    );
+                );
             }
         }
 
@@ -178,7 +173,7 @@ class PDFService
                     'name' => self::FILES_FIELD,
                     'filename' => $file,
                     'contents' => Utils::tryFopen($file, 'r')
-                    ));
+                ));
             }
 
             // add the xml file
@@ -186,19 +181,19 @@ class PDFService
                 'name' => self::FILES_FIELD,
                 'filename' => $xmlFilename,
                 'contents' => Utils::tryFopen($xmlFilename, 'r')
-                ));
+            ));
 
             // add the XSLT file
             array_push($multipartData, array(
                 'name' => self::FILES_FIELD,
                 'filename' => $xsltFilename,
                 'contents' => Utils::tryFopen($xsltFilename, 'r')
-                ));
+            ));
         } catch (\RuntimeException $re) {
             throw new PDFServiceException(
                 'Unable to read file(s) needed for PDF generation: ' . $re->getMessage(),
                 PDFServiceException::PDF_FILE_ERROR
-                );
+            );
         }
 
         try {
@@ -225,13 +220,13 @@ class PDFService
                 throw new PDFServiceException(
                     'Error requesting PDF: ' . $reason,
                     PDFServiceException::GENERATION_ERROR
-                    );
+                );
             }
         } catch (ClientExceptionInterface $cei) {
             throw new PDFServiceException(
                 'Error generating PDF: ' . $cei->getMessage(),
                 PDFServiceException::GENERATION_ERROR
-                );
+            );
         }
 
         return $result;
@@ -262,7 +257,7 @@ class PDFService
                 throw new PDFServiceException(
                     'Unable to create PDF file: ' . $re->getMessage(),
                     PDFServiceException::PDF_FILE_ERROR
-                    );
+                );
             }
         } else {
             $reason = $response->getBody()->getContents();
@@ -274,7 +269,7 @@ class PDFService
             throw new PDFServiceException(
                 'Error retrieving PDF: ' . $reason,
                 PDFServiceException::PDF_FETCH_ERROR
-                );
+            );
         }
     }
 }
