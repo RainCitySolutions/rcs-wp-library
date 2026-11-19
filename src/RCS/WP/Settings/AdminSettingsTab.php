@@ -59,7 +59,7 @@ abstract class AdminSettingsTab
      */
     abstract public function addSettings(string $pageSlug): void;
 
-    final public function initSettings(string $pageSlug): void
+    public function initSettings(string $pageSlug): void
     {
         $this->pageSlug = $pageSlug;
 
