@@ -9,9 +9,13 @@ final class LastLoginManager
     const COLUMN_NAME = 'raincity_wpf-last-login';
     const LAST_LOGIN_META_TAG = 'last_login';
 
+    private readonly string $textDomain;
+
     public function __construct(
-        private readonly string $textDomain
+        PluginInfoInterface $pluginInfo
     ) {
+        $this->textDomain = $pluginInfo->getSlug();
+
         add_action('wp_login', [$this, 'wpLoginAction'], 10, 2);
         add_action('user_register', [$this, 'userRegisterAction']);
 

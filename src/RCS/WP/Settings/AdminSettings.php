@@ -1,5 +1,7 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
+
 namespace RCS\WP\Settings;
 
 use Psr\Log\LoggerInterface;
@@ -7,35 +9,31 @@ use RCS\WP\PluginInfoInterface;
 
 abstract class AdminSettings
 {
-    /** @var array<string, AdminSettingsTab> */
+    /** @var array<string,AdminSettingsTab> */
     private array $tabs = [];
 
     /**
      *
      * @param PluginInfoInterface $pluginInfo
-     * @param iterable<AdminSettingsTab> $tabs
      * @param string $optionsPageTitle
      * @param string $optionsPageSlug
      * @param string $optionsMenuTitle
+     * @param iterable<AdminSettingsTab> $tabs
      * @param LoggerInterface $logger
      */
-    public function __construct(
-        protected PluginInfoInterface $pluginInfo,
+    protected function __construct(
+        protected readonly PluginInfoInterface $pluginInfo,
+        protected readonly string $optionsPageTitle,
+        protected readonly string $optionsPageSlug,
+        protected readonly string $optionsMenuTitle,
         iterable $tabs,
-        protected string $optionsPageTitle,
-        protected string $optionsPageSlug,
-        protected string $optionsMenuTitle,
-        protected LoggerInterface $logger
-        )
-    {
-        foreach($tabs as $tab) {
-            $this->registerTab($tab);
-        }
-    }
-
-    protected function initializeInstance(): void
-    {
+        protected readonly LoggerInterface $logger
+    ) {
         if (is_admin()) {
+            foreach ($tabs as $tab) {
+                $this->registerTab($tab);
+            }
+
             add_action('admin_enqueue_scripts', [$this, 'onAdminEnqueueScripts']);
 
             add_action('admin_init', [$this, 'addSettings']);
@@ -149,54 +147,53 @@ abstract class AdminSettings
     final public function renderSettingsPage(): void
     {
         // check user capabilities
-        if ( current_user_can( 'manage_options' ) && count($this->tabs) != 0)
-        {
+        if (current_user_can('manage_options') && count($this->tabs) != 0) {
             $activeTab = $this->getActiveTab();
 
-            ?>
+?>
             <div class="wrap">
                 <h2><?php echo esc_html($this->optionsPageTitle); ?></h2>
 
                 <!-- wordpress provides the styling for tabs. -->
                 <h2 class="nav-tab-wrapper">
                     <?php
-                        $activeTabId = $activeTab->getId();
+                    $activeTabId = $activeTab->getId();
 
-                        // Generate a link for each registered tab
-                        foreach ($this->tabs as $tab) {
-                            // When tab buttons are clicked we jump back to the same page but with a new parameter
-                            // that represents the clicked tab. accordingly we make it active
-                            printf(
-                                '<a href="%s" class="nav-tab %s">%s</a>',
-                                esc_url(
-                                    add_query_arg(
-                                        [
-                                            'page' => $this->optionsPageSlug,
-                                            'tab' => $tab->getId()
-                                        ],
-                                        admin_url('options-general.php')
-                                    )
-                                ),
-                                $activeTabId === $tab->getId() ? 'nav-tab-active' : '',
-                                esc_html($tab->getName())
-                            );
-                        }
+                    // Generate a link for each registered tab
+                    foreach ($this->tabs as $tab) {
+                        // When tab buttons are clicked we jump back to the same page but with a new parameter
+                        // that represents the clicked tab. accordingly we make it active
+                        printf(
+                            '<a href="%s" class="nav-tab %s">%s</a>',
+                            esc_url(
+                                add_query_arg(
+                                    [
+                                        'page' => $this->optionsPageSlug,
+                                        'tab' => $tab->getId()
+                                    ],
+                                    admin_url('options-general.php')
+                                )
+                            ),
+                            $activeTabId === $tab->getId() ? 'nav-tab-active' : '',
+                            esc_html($tab->getName())
+                        );
+                    }
                     ?>
                 </h2>
 
                 <form method="post" action="options.php">
                     <?php
-                        settings_fields($this->optionsPageSlug);
-                        do_settings_sections($this->optionsPageSlug);
-                        submit_button( 'Save Changes' );
+                    settings_fields($this->optionsPageSlug);
+                    do_settings_sections($this->optionsPageSlug);
+                    submit_button('Save Changes');
                     ?>
                 </form>
 
                 <?php
-                    $activeTab->renderPostFormData();
+                $activeTab->renderPostFormData();
                 ?>
             </div>
-            <?php
+<?php
         }
     }
 
@@ -215,8 +212,7 @@ abstract class AdminSettings
         string $pluginFile,
         ?array $pluginData,
         string $context
-        ): array
-    {
+    ): array {
         if ($pluginFile == $this->pluginInfo->getFile()) {
             array_unshift(
                 $actions,
@@ -224,13 +220,12 @@ abstract class AdminSettings
                     '<a href="%s">%s</a>',
                     esc_url(
                         admin_url('options-general.php?page=' . $this->optionsPageSlug)
-                        ),
+                    ),
                     esc_html__('Settings', 'your-text-domain')
-                    )
-                );
+                )
+            );
         }
 
         return $actions;
     }
-
 }
