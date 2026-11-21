@@ -1,79 +1,92 @@
 <?php
-declare(strict_types = 1);
+declare(strict_types=1);
 namespace RCS\WP;
 
+use Monolog\Handler\RotatingFileHandler;
 use Monolog\Level;
 use Monolog\LogRecord;
-use Monolog\Logger;
-use Monolog\Formatter\LineFormatter;
-use Monolog\Handler\RotatingFileHandler;
 use Monolog\Processor\IntrospectionProcessor;
 use Monolog\Processor\PsrLogMessageProcessor;
-use Psr\Log\LoggerInterface;
+use RCS\Logging\BaseLogger;
 
-class PluginLogger implements LoggerInterface
+class PluginLogger extends BaseLogger
 {
-    private LoggerInterface $backingLogger;
+    private string $logFile;
 
     /**
      *
      * @param PluginInfoInterface $pluginInfo
      */
     public function __construct(
-        protected readonly PluginInfoInterface $pluginInfo
-        )
-    {
+        PluginInfoInterface $pluginInfo
+    ) {
         $logDir = $pluginInfo->getWriteDir() . 'logs';
         wp_mkdir_p($logDir);
 
-        $logFile = $logDir . DIRECTORY_SEPARATOR . $pluginInfo->getSlug() . '.log';
+        $this->logFile = $logDir . DIRECTORY_SEPARATOR . $pluginInfo->getSlug() . '.log';
 
-        $dateFormat = 'M d H:i:s';
-        $msgFormat = join(
-            ' ',
-            [
-                '%datetime%',
-                '%level_name%',
-                '%extra.class%',
-                '[%extra.reqId%]',
-                '(%extra.userId%/%extra.userName%)',
-                ':',
-                '%message% %context%'
-            ]
-        ).PHP_EOL;
-
-        $formatter = new LineFormatter ($msgFormat, $dateFormat, false, true);
-        $formatter->setMaxLevelNameLength(3);
-
-//             $handler = new StreamHandler($this->logFile);
-//             $handler->setFormatter($formatter); //  attach the formatter to the handler
-
-        $handler = new RotatingFileHandler($logFile, 14, Level::Debug);
-        $handler->setFormatter($formatter); //  attach the formatter to the handler
-
-        $logger = new Logger($pluginInfo->getSlug());
-        $logger->pushHandler($handler);
-
-        $this->addProcessors($logger);
-
-        $this->backingLogger = $logger;
+        parent::__construct($pluginInfo->getSlug());
     }
 
-    protected function addProcessors(Logger $logger): void
+    // As of Nov. 2026 - this is the default
+    // protected function getDateFormat(): string
+    // {
+    //     return 'M d H:i:s';
+    // }
+
+    // As of Nov. 2026 - this is the default
+    // protected function getMsgFormat(): string
+    // {
+    //     return join(
+    //         ' ',
+    //         [
+    //             '%datetime%',
+    //             '%level_name%',
+    //             '%extra.class%',
+    //             '[%extra.reqId%]',
+    //             '(%extra.userId%/%extra.userName%)',
+    //             ':',
+    //             '%message% %context%'
+    //         ]
+    //     ).PHP_EOL;
+    // }
+
+    protected function addHandlers(array &$handlers): void
+    {
+        $handlers[] = new RotatingFileHandler($this->logFile, 14, Level::Debug);
+    }
+
+    protected function addProcessors(array &$processors): void
     {
         // Custom process to trim and pad classname added by IntrospectionProcessor
-        $classnameProcessor = function (LogRecord $record): LogRecord
-        {
-            if (isset($record['extra']['class'])) {
-                // basename() gets the class name without the namespace
-                $record['extra']['class'] = str_pad(basename($record['extra']['class']), 30);
+
+        // Classname processor
+        $processors[] = function (LogRecord $record): LogRecord {
+            if (isset($record->extra['class'])) {
+                $record->extra['class'] = str_pad(
+                    substr(
+                        strrchr('\\' . $record->extra['class'], '\\'),
+                        1
+                    ),
+                    30
+                );
             }
 
             return $record;
         };
 
-        $requestIdProccessor = function (LogRecord $record): LogRecord
-        {
+        // Introspection processor
+        $processors[] = new IntrospectionProcessor(
+            skipClassesPartials: [
+                    //                BaseLogger::class,
+                PluginLogger::class
+            ]
+        );
+
+        $processors[] = new PsrLogMessageProcessor(null, true);
+
+        // Request Id processor
+        $processors[] = function (LogRecord $record): LogRecord {
             if (isset($_SERVER['REQUEST_TIME_FLOAT'])) {
                 $reqId = $_SERVER['REQUEST_TIME_FLOAT'];
             } else {
@@ -85,9 +98,9 @@ class PluginLogger implements LoggerInterface
             return $record;
         };
 
-        $userContextProccessor = function (LogRecord $record): LogRecord
-        {
-            if (function_exists( 'wp_get_current_user' ) ) {
+        // User context processor
+        $processors[] = function (LogRecord $record): LogRecord {
+            if (function_exists('wp_get_current_user')) {
                 $wpUser = wp_get_current_user();
 
                 if ($wpUser->exists()) {
@@ -98,105 +111,5 @@ class PluginLogger implements LoggerInterface
 
             return $record;
         };
-
-        $introspectionProcessor = new IntrospectionProcessor(
-            skipClassesPartials: [
-                PluginLogger::class
-            ]
-        );
-
-        $processors = [
-            $classnameProcessor,
-            $introspectionProcessor,
-            new PsrLogMessageProcessor(null, true),
-            $requestIdProccessor,
-            $userContextProccessor
-        ];
-
-
-        foreach($processors as $processor) {
-            $logger->pushProcessor($processor);
-        }
-    }
-
-    /**
-     * {@inheritDoc}
-     * @see \Psr\Log\LoggerInterface::alert()
-     */
-    public function alert(string|\Stringable $message, array $context = array()): void
-    {
-        $this->backingLogger->alert($message, $context);
-    }
-
-    /**
-     * {@inheritDoc}
-     * @see \Psr\Log\LoggerInterface::critical()
-     */
-    public function critical(string|\Stringable $message, array $context = array()): void
-    {
-        $this->backingLogger->critical($message, $context);
-    }
-
-    /**
-     * {@inheritDoc}
-     * @see \Psr\Log\LoggerInterface::debug()
-     */
-    public function debug(string|\Stringable $message, array $context = array()): void
-    {
-        $this->backingLogger->debug($message, $context);
-    }
-
-    /**
-     * {@inheritDoc}
-     * @see \Psr\Log\LoggerInterface::emergency()
-     */
-    public function emergency(string|\Stringable $message, array $context = array()): void
-    {
-        $this->backingLogger->emergency($message, $context);
-    }
-
-    /**
-     * {@inheritDoc}
-     * @see \Psr\Log\LoggerInterface::error()
-     */
-    public function error(string|\Stringable $message, array $context = array()): void
-    {
-        $this->backingLogger->error($message, $context);
-    }
-
-    /**
-     * {@inheritDoc}
-     * @see \Psr\Log\LoggerInterface::info()
-     */
-    public function info(string|\Stringable $message, array $context = array()): void
-    {
-        $this->backingLogger->info($message, $context);
-    }
-
-    /**
-     * {@inheritDoc}
-     * @see \Psr\Log\LoggerInterface::log()
-     */
-    public function log($level, string|\Stringable $message, array $context = array()): void
-    {
-        $this->backingLogger->log($level, $message, $context);
-    }
-
-    /**
-     * {@inheritDoc}
-     * @see \Psr\Log\LoggerInterface::notice()
-     */
-    public function notice(string|\Stringable $message, array $context = array()): void
-    {
-        $this->backingLogger->notice($message, $context);
-    }
-
-    /**
-     * {@inheritDoc}
-     * @see \Psr\Log\LoggerInterface::warning()
-     */
-    public function warning(string|\Stringable $message, array $context = array()): void
-    {
-        $this->backingLogger->warning($message, $context);
     }
 }
