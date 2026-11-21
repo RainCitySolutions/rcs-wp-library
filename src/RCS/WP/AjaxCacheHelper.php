@@ -51,7 +51,7 @@ class AjaxCacheHelper implements AjaxHandlerImplInf
             'raincity_dataCacheObj',
             array(
                 'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce'    => wp_create_nonce($this->pluginInfo->getName()),
+                'nonce'    => wp_create_nonce($this->pluginInfo->getSlug()),
                 'plugin'   => $this->pluginInfo->getName()
             )
         );
@@ -70,7 +70,7 @@ class AjaxCacheHelper implements AjaxHandlerImplInf
                 $(".wpfclearcache").click(function() {
                     $.post(
                         "<?php echo admin_url('admin-ajax.php'); ?>", {
-                            _ajax_nonce: "<?php echo wp_create_nonce($this->pluginInfo->getName()); ?>",
+                            _ajax_nonce: "<?php echo wp_create_nonce($this->pluginInfo->getSlug()); ?>",
                             action: "<?php echo self::AJAX_ACTION_CLEAR_DATA_CACHE; ?>",
                             plugin: "<?php echo $this->pluginInfo->getName(); ?>"
                         },
@@ -86,7 +86,7 @@ class AjaxCacheHelper implements AjaxHandlerImplInf
     {
         $this->logger->debug('Ajax request to run Clear DataCache');
 
-        check_ajax_referer($this->pluginInfo->getName());
+        check_ajax_referer($this->pluginInfo->getSlug());
 
         $ajaxPluginName = $_REQUEST['plugin'];
         if ($ajaxPluginName == $this->pluginInfo->getName()) {
