@@ -42,7 +42,7 @@ class WordPressHelper
             }
 
             // Redirect unauthorized visitors
-            if (! is_user_logged_in()) {
+            if (!is_user_logged_in()) {
                 $url = self::getVisitedUrl();
 
                 /**
@@ -52,7 +52,7 @@ class WordPressHelper
 
                 if (
                     preg_replace('/\?.*/', '', $url) !== preg_replace('/\?.*/', '', wp_login_url()) &&
-                    ! $bypass
+                    !$bypass
                     //                    && ! in_array( $url, $whitelist )
                 ) {
                     // Determine redirect URL
@@ -102,7 +102,7 @@ class WordPressHelper
 
     private static function getVisitedUrl(): string
     {
-        $url  = isset($_SERVER['HTTPS']) && 'on' === $_SERVER['HTTPS'] ? 'https' : 'http';
+        $url = isset($_SERVER['HTTPS']) && 'on' === $_SERVER['HTTPS'] ? 'https' : 'http';
         $url .= '://' . $_SERVER['HTTP_HOST'];
 
         // port is prepopulated here sometimes
@@ -175,5 +175,17 @@ class WordPressHelper
         );
 
         return $query->have_posts() ? reset($query->posts) : null;
+    }
+
+    /**
+     * Defer the dispatching of any jobs in a background process.
+     *
+     * @param \WP_Background_Process $bgProcess
+     */
+    public static function deferBgProcessDispatch(\WP_Background_Process $bgProcess): void
+    {
+        add_action('wp_footer', function () use ($bgProcess) {
+            $bgProcess->dispatch();
+        }, 100);
     }
 }
