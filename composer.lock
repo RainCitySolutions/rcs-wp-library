@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0323c26e2a7ae47f17a919330ac9fac8",
+    "content-hash": "8febe666dd9d37e15dc765661062b037",
     "packages": [
         {
             "name": "composer/installers",
@@ -590,16 +590,16 @@
         },
         {
             "name": "guzzlehttp/psr7",
-            "version": "3.5.2",
+            "version": "3.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/guzzle/psr7.git",
-                "reference": "a01f1c10eb4b81778e0956be820d999b84a59f36"
+                "reference": "1fa0f8319c046b7dec80030460254283d851388e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/guzzle/psr7/zipball/a01f1c10eb4b81778e0956be820d999b84a59f36",
-                "reference": "a01f1c10eb4b81778e0956be820d999b84a59f36",
+                "url": "https://api.github.com/repos/guzzle/psr7/zipball/1fa0f8319c046b7dec80030460254283d851388e",
+                "reference": "1fa0f8319c046b7dec80030460254283d851388e",
                 "shasum": ""
             },
             "require": {
@@ -691,7 +691,7 @@
             ],
             "support": {
                 "issues": "https://github.com/guzzle/psr7/issues",
-                "source": "https://github.com/guzzle/psr7/tree/3.5.2"
+                "source": "https://github.com/guzzle/psr7/tree/3.6.0"
             },
             "funding": [
                 {
@@ -707,8 +707,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-11-21T23:48:48+00:00",
-            "published-time": "2026-11-21T23:49:42+00:00"
+            "time": "2026-11-22T00:00:35+00:00",
+            "published-time": "2026-11-22T00:01:04+00:00"
         },
         {
             "name": "json-mapper/json-mapper",
