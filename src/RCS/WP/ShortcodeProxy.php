@@ -1,12 +1,12 @@
 <?php
-declare(strict_types = 1);
+declare(strict_types=1);
 namespace RCS\WP;
 
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
-use RCS\WP\Shortcodes\ShortcodeImplInf;
 use Psr\Log\LoggerInterface;
+use RCS\WP\Shortcodes\ShortcodeImplInf;
 
 /**
  * This class acts as a proxy for classes implementing shortcodes,
@@ -24,8 +24,8 @@ class ShortcodeProxy
         private ContainerInterface $diContainer,
         private PluginInfoInterface $pluginInfo,
         private LoggerInterface $logger
-        )
-    {}
+    ) {
+    }
 
     /**
      * Render a short code.
@@ -51,7 +51,7 @@ class ShortcodeProxy
 
                 // Maybe enqueue assets of the shortcode.
                 if (!is_admin()) {
-                    foreach($obj->getScripts() as $scriptMeta) {
+                    foreach ($obj->getScripts() as $scriptMeta) {
                         wp_enqueue_script(
                             $scriptMeta->id,
                             $scriptMeta->url,
@@ -60,7 +60,7 @@ class ShortcodeProxy
                             [
                                 'strategy' => $scriptMeta->strategy
                             ]
-                            );
+                        );
                     }
                 }
 
@@ -70,13 +70,12 @@ class ShortcodeProxy
                         $styleMeta->url,
                         $styleMeta->deps,
                         $this->pluginInfo->getVersion(),
-                        );
+                    );
                 }
 
                 // Have the implementation render the shortcode
                 $html = $obj->renderShortcode($attrs, $content);
-            }
-            catch (NotFoundExceptionInterface | ContainerExceptionInterface $e) {
+            } catch (NotFoundExceptionInterface | ContainerExceptionInterface $e) {
                 $this->logger->error(
                     'Unable to retrieve class instance for shortcode {sc}: {err}',
                     [
@@ -100,18 +99,25 @@ class ShortcodeProxy
         // Ensure the class implements the ShortcodeImplInf interface
         assert(
             is_a($shortcodeClass, ShortcodeImplInf::class, true),
-            $shortcodeClass. ' must implement ' . ShortcodeImplInf::class
-            );
+            $shortcodeClass . ' must implement ' . ShortcodeImplInf::class
+        );
 
         $tag = $shortcodeClass::getTagName();
 
-        if (!array_key_exists($tag, $this->shortcodeMap))
-        {
+        if (!array_key_exists($tag, $this->shortcodeMap)) {
             // Add the mapping
             $this->shortcodeMap[$tag] = $shortcodeClass;
 
             // add the shortcode to WordPress with our handler
             add_shortcode($tag, [$this, 'renderShortcode']);
+
+            // add_filter(DocumentationTab::DOCUMENTATION_FILTER, array($shortCodeImpl, 'getDocumentation'));
+            // add_filter(
+            //     'shortcode_atts_' . $tag,
+            //     array($shortCodeImpl, 'filterAttributes'),
+            //     10,
+            //     4
+            // );
         }
     }
 
@@ -122,7 +128,7 @@ class ShortcodeProxy
      */
     public function addShortcodes(array $shortcodes): void
     {
-        foreach($shortcodes as $class) {
+        foreach ($shortcodes as $class) {
             $this->addShortcode($class);
         }
     }
