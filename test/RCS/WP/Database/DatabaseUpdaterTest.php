@@ -40,10 +40,6 @@ final class DatabaseUpdaterTest extends TestCase
         Functions\expect('get_temp_dir')
             ->andReturn(sys_get_temp_dir() . DIRECTORY_SEPARATOR);
 
-        Functions\expect('add_action')
-            ->once()
-            ->with('init', \Mockery::type('array'), 0);
-
         $this->options
             ->method('isValidKey')
             ->with(DatabaseUpdater::DATABASE_VERSION)
@@ -83,7 +79,7 @@ final class DatabaseUpdaterTest extends TestCase
             $this->logger
         );
 
-        $updater->privUpgradeDatabase();
+        $updater->upgradeDatabase();
     }
 
     #[Test]
@@ -127,6 +123,6 @@ final class DatabaseUpdaterTest extends TestCase
             $this->logger
         );
 
-        $updater->privUpgradeDatabase();
+        $updater->upgradeDatabase();
     }
 }

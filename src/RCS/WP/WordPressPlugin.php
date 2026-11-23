@@ -92,6 +92,8 @@ abstract class WordPressPlugin
                 $this->container = $this->privInitializeContainer($entryPointFile);
 
                 $this->privInitialize($this->container);
+
+                $this->container->get(DatabaseUpdater::class)->upgradeDatabase();
             }
         );
 
@@ -508,8 +510,6 @@ abstract class WordPressPlugin
             AjaxCacheHelper::class => \DI\autowire(),
 
             \Psr\Http\Client\ClientInterface::class => \DI\autowire(\GuzzleHttp\Client::class),
-
-            DatabaseUpdater::class => \DI\autowire(),
 
             LastLoginManager::class => \DI\autowire(),
             RedirectionManager::class => \DI\autowire(),

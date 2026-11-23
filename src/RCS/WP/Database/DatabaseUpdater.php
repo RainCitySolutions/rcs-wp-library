@@ -34,8 +34,6 @@ class DatabaseUpdater
         if (!isset(self::$dbUpgradeSemaphoreFile)) {
             self::$dbUpgradeSemaphoreFile = get_temp_dir() . $pluginInfo->getSlug() . '_dbUpdateSemaphore.txt';
         }
-
-        add_action('init', [$this, 'privUpgradeDatabase'], 0);
     }
 
     /**
@@ -43,7 +41,7 @@ class DatabaseUpdater
      *
      * @throws \Exception
      */
-    public function privUpgradeDatabase(): void
+    public function upgradeDatabase(): void
     {
         $this->dbVersion = $this->options->getValue(self::DATABASE_VERSION);
 
