@@ -187,7 +187,7 @@ extends AdminSettingsTab
 
     public function ajaxAddUrl(): void
     {
-        $this->logger->debug('Ajax request to run add new Short URL');
+        $this->logger->debug('Ajax request to add new Short URL');
 
         if (
             1 === check_ajax_referer($this->tabId) &&
@@ -222,7 +222,7 @@ extends AdminSettingsTab
     public function ajaxDeleteUrl(): void
     {
         $result = '';
-        $this->logger->debug('Ajax request to run add new Short URL');
+        $this->logger->debug('Ajax request to delete Short URL');
 
         if (1 === check_ajax_referer($this->tabId) && current_user_can('administrator')) {
             if (isset($_REQUEST['shortcode'])) {
