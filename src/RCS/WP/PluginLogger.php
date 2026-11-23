@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace RCS\WP;
 
 use Monolog\Handler\RotatingFileHandler;
@@ -78,7 +80,7 @@ class PluginLogger extends BaseLogger
         // Introspection processor
         $processors[] = new IntrospectionProcessor(
             skipClassesPartials: [
-                    //                BaseLogger::class,
+                BaseLogger::class,
                 PluginLogger::class
             ]
         );

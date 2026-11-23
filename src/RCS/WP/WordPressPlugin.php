@@ -1,10 +1,12 @@
 <?php
+
 namespace RCS\WP;
 
 use DI\ContainerBuilder;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use RCS\Cache\DataCache;
+use RCS\Logging\LastErrorLogger;
 use RCS\Logging\Timer;
 use RCS\Logging\TimerInterface;
 use RCS\WP\Database\DatabaseUpdater;
@@ -40,7 +42,7 @@ abstract class WordPressPlugin
 
 
     //    private const DEFAULT_PLUGIN_VERSION = '1.0.0';
-//    private const DB_UPGRADE_ACTIVE_FLAG = 'raincity_wpf_dbUpgradeActive';
+    //    private const DB_UPGRADE_ACTIVE_FLAG = 'raincity_wpf_dbUpgradeActive';
 
     const DATABASE_VERSIONS_OPTIONS_NAME = 'raincity_wpf_database_versions';
 
@@ -50,6 +52,7 @@ abstract class WordPressPlugin
 
     const ON_REGISTER_SHORTCODE_ACTION = 'raincity_wpf_register_shortcode_action';
 
+    protected readonly PluginInfoInterface $pluginInfo;
     protected ContainerInterface $container;
 
     /**
@@ -75,52 +78,29 @@ abstract class WordPressPlugin
         return $plugin;
     }
 
+    /**
+     * Classes should override this function to execute code during object
+     * construction.
+     * 
+     * @return void
+     */
+    protected function onConstruct(): void {}
 
     private function __construct(
         string $entryPointFile
     ) {
-        $this->container = $this->privInitializeContainer($entryPointFile);
+        $this->pluginInfo = new PluginInfo($entryPointFile);
 
-        $this->privInitialize($this->container);
-    }
+        // Give children an chance to initialize
+        $this->onConstruct();
 
-    /**
-     * Classes should override this function to performan any initialization
-     * needed at the time of instantiation.
-     * 
-     * @return void
-     */
-    protected function initialize(ContainerInterface $container): void
-    {
-    }
-
-    /**
-     * Perform any initialization needed at the time of instantiation.
-     * 
-     * @return void
-     */
-    private function privInitialize(ContainerInterface $container): void
-    {
-        /**
-         * Hook to load a plugin specific functions.php from the plugin's
-         * write folder, if it exists, after the theme has been loaded. The
-         * write folder is wp-content/uploads/<pluginSlug>
-         *
-         * Allows for customization without a change to theme or plugin code.
-         *
-         * <p><strong>Use With Care!</strong>
-         */
         add_action(
-            'after_setup_theme',
-            function () use ($container): void {
-                $pluginInfo = $container->get(PluginInfoInterface::class);
-                $functionsPhp = $pluginInfo->getWriteDir() . '/functions.php';
+            'init',
+            function () use ($entryPointFile): void {
+                $this->container = $this->privInitializeContainer($entryPointFile);
 
-                if (file_exists($functionsPhp)) {
-                    require_once $functionsPhp;
-                }
-            },
-            100
+                $this->privInitialize($this->container);
+            }
         );
 
         // Action to generate a unique requestID for each request, used in logging
@@ -132,6 +112,43 @@ abstract class WordPressPlugin
             5
         );
 
+        /**
+         * Hook to load a plugin specific functions.php from the plugin's
+         * write folder, if it exists, after the theme has been loaded. The
+         * write folder is wp-content/uploads/<pluginSlug>
+         *
+         * Allows for customization without a change to theme or plugin code.
+         *
+         * <p><strong>Use With Care!</strong>
+         */
+        add_action(
+            'after_setup_theme',
+            function (): void {
+                $functionsPhp = $this->pluginInfo->getWriteDir() . 'functions.php';
+
+                if (file_exists($functionsPhp)) {
+                    require_once $functionsPhp;
+                }
+            },
+            100
+        );
+    }
+
+    /**
+     * Classes should override this function to performan any initialization
+     * needed at the time of instantiation.
+     * 
+     * @return void
+     */
+    protected function initialize(ContainerInterface $container): void {}
+
+    /**
+     * Perform any initialization needed at the time of instantiation.
+     * 
+     * @return void
+     */
+    private function privInitialize(ContainerInterface $container): void
+    {
         add_action('admin_enqueue_scripts', [$this, 'onAdminEnqueueScripts']);
         add_action('wp_enqueue_scripts', [$this, 'onWpEnqueueScripts']);
         add_filter('script_loader_tag', [$this, 'onScriptLoaderTag'], 10, 2);
@@ -171,11 +188,13 @@ abstract class WordPressPlugin
 
         $containerProps = [
             self::PLUGIN_ENTRYPOINT => $entryPointFile,
+            PluginInfoInterface::class => $this->pluginInfo,
         ];
 
         $containerBuilder = new ContainerBuilder();
         $containerBuilder->addDefinitions($containerProps);
-        $containerBuilder->addDefinitions(self::getDefinitions());
+        $containerBuilder->addDefinitions($this->privGetDefinitions());
+        $containerBuilder->addDefinitions($this->getDefinitions());
 
         // 20260317 - stop using compiled container as it misses providing some parameters to objects
         //         if (!file_exists(get_home_path() . 'wp-config-local.php')) {
@@ -187,8 +206,7 @@ abstract class WordPressPlugin
         $this->loadContainerClasses(
             $container,
             [
-                RedirectionManager::class,
-                LastLoginManager::class,
+                LastErrorLogger::class,
             ]
         );
 
@@ -242,9 +260,7 @@ abstract class WordPressPlugin
      * {@link AdminSettingsTab::onEnqueueScripts()} function for registering
      * tab specific scripts and styles.
      */
-    public function onAdminEnqueueScripts(): void
-    {
-    }
+    public function onAdminEnqueueScripts(): void {}
 
 
     /**
@@ -254,9 +270,7 @@ abstract class WordPressPlugin
      * scripts and styles. This function should be used for any scripts
      * or styles that need to be available on any public page.
      */
-    public function onWpEnqueueScripts(): void
-    {
-    }
+    public function onWpEnqueueScripts(): void {}
 
 
     /**
@@ -459,11 +473,23 @@ abstract class WordPressPlugin
     // }
 
     /**
+     * Classes should override this function to provide any definitions to be
+     * added to the Dependency Injection container.
+     * 
+     * @return array<string,mixed> An array DI definitions to be added to the
+     *      container.
+     */
+    protected function getDefinitions(): array
+    {
+        return [];
+    }
+
+    /**
      * 
      * 
      * @return array<string,mixed>
      */
-    private static function getDefinitions(): array
+    private function privGetDefinitions(): array
     {
         return [
             // DSN for Symfony/LockFactory
@@ -473,20 +499,17 @@ abstract class WordPressPlugin
                 return StoreFactory::createStore($c->get('lock.dsn'));
             },
 
-            PluginInfoInterface::class => \DI\create(PluginInfo::class)
-                ->constructor(\DI\get(self::PLUGIN_ENTRYPOINT)),
-
             LoggerInterface::class => \DI\autowire(PluginLogger::class),
             \Psr\SimpleCache\CacheInterface::class => \DI\autowire(DataCache::class),
             TimerInterface::class => \DI\autowire(Timer::class),
 
             LockFactory::class => \DI\autowire(),
-                // LockFactory::class => function (ContainerInterface $c): LockFactory {
-                //     $factory = new LockFactory($c->get(PersistingStoreInterface::class));
-                //     $factory->setLogger($c->get(LoggerInterface::class));
+            // LockFactory::class => function (ContainerInterface $c): LockFactory {
+            //     $factory = new LockFactory($c->get(PersistingStoreInterface::class));
+            //     $factory->setLogger($c->get(LoggerInterface::class));
 
-                //     return $factory;
-                //     },
+            //     return $factory;
+            //     },
 
             ShortcodeProxy::class => \DI\autowire(),
             AjaxHandlerProxy::class => \DI\autowire(),
@@ -499,14 +522,18 @@ abstract class WordPressPlugin
             LastLoginManager::class => \DI\autowire(),
             RedirectionManager::class => \DI\autowire(),
 
-                /**
-                 * Shortcodes
-                 */
+            /**
+             * Shortcodes
+             */
 
-                /**
-                 * Administration classes
-                 */
+            /**
+             * Administration classes
+             */
             ShortUrlOptionsTab::class => \DI\autowire(),
+
+            LastErrorLogger::class => \DI\autowire(),
+            EmailShortCode::class => \DI\autowire(),
+            UsernameShortCode::class => \DI\autowire(),
         ];
     }
 }

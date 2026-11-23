@@ -38,52 +38,52 @@ extends AdminSettingsTab
             function () {
 ?>
             <style>
-                #raincityWpfShortUrlTable table {
+                #rcsWpLibShortUrlTable table {
                     width: 100%;
                 }
 
-                #raincityWpfShortUrlTable th:first-child {
+                #rcsWpLibShortUrlTable th:first-child {
                     width: 20%;
                     text-align: left;
                 }
 
-                #raincityWpfShortUrlTable th:nth-child(2) {
+                #rcsWpLibShortUrlTable th:nth-child(2) {
                     width: 70%;
                     text-align: left;
                 }
 
-                #raincityWpfShortUrlTable th:nth-child(3) {
+                #rcsWpLibShortUrlTable th:nth-child(3) {
                     width: 10%;
                     text-align: center;
                 }
 
-                #raincityWpfShortUrlTable td:nth-child(3) {
+                #rcsWpLibShortUrlTable td:nth-child(3) {
                     text-align: center;
                 }
 
-                #raincityWpfShortUrlTable .raincityWpfShortUrlDeleteBtn svg {
+                #rcsWpLibShortUrlTable .rcsWpLibShortUrlDeleteBtn svg {
                     height: 20px;
                 }
 
-                #raincityWpfShortUrlCode {
+                #rcsWpLibShortUrlCode {
                     width: 19%
                 }
 
-                #raincityWpfShortUrlInput {
+                #rcsWpLibShortUrlInput {
                     width: 69%
                 }
 
-                #raincityWpfShortUrlAddBtn {
+                #rcsWpLibShortUrlAddBtn {
                     width: 9%
                 }
             </style>
-            <div id="raincityWpfShortUrlTable">
+            <div id="rcsWpLibShortUrlTable">
                 <?php print $this->renderMappingTable(); ?>
             </div>
             <br>
-            <input type="text" id="raincityWpfShortUrlCode" maxlength="32"></input>
-            <input type="text" id="raincityWpfShortUrlInput" maxlength="255"></input>
-            <input type="button" id="raincityWpfShortUrlAddBtn" value="Add"
+            <input type="text" id="rcsWpLibShortUrlCode" maxlength="32"></input>
+            <input type="text" id="rcsWpLibShortUrlInput" maxlength="255"></input>
+            <input type="button" id="rcsWpLibShortUrlAddBtn" value="Add"
                 data-url="<?php echo admin_url('admin-ajax.php'); ?>"
                 data-nonce="<?php echo wp_create_nonce($this->tabId); ?>"
                 data-action="<?php echo self::AJAX_ADD_SHORT_URL; ?>"></input>
@@ -119,8 +119,8 @@ extends AdminSettingsTab
                         <td><?php echo $urlMapping->longUrl; ?></td>
                         <td>
                             <span
-                                class="raincityWpfShortUrlDeleteBtn"
-                                data-raincity-wpf-shorturlcode="<?php echo $urlMapping->shortCode; ?>"
+                                class="rcsWpLibShortUrlDeleteBtn"
+                                data-rcs-wp-lib-shorturlcode="<?php echo $urlMapping->shortCode; ?>"
                                 data-url="<?php echo $ajaxUrl; ?>"
                                 data-nonce="<?php echo $ajaxNonce; ?>"
                                 data-action="<?php echo self::AJAX_DELETE_SHORT_URL; ?>">
@@ -166,7 +166,7 @@ extends AdminSettingsTab
     {
         wp_enqueue_script(
             $this->tabId,
-            $pluginBaseUrl . 'vendor/raincity/wp-plugin-framework/src/js/raincity-wpf-shorturl.js',
+            $pluginBaseUrl . 'vendor/raincity/rcs-wp-library/src/js/rcs-wp-lib-shorturl.js',
             array('jquery'),
             $pluginVersion,
             true
