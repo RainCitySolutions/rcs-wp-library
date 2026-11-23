@@ -12,7 +12,7 @@ use Psr\Log\LoggerInterface;
  */
 class LastErrorLogger
 {
-    private static $shutdownFunctionRegistered = false;
+    private static bool $shutdownFunctionRegistered = false;
 
     public function __construct(
         LoggerInterface $logger

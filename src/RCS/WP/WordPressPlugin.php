@@ -1,7 +1,26 @@
 <?php
 namespace RCS\WP;
 
-use RCS\Logging\LastErrorLogger;
+use DI\ContainerBuilder;
+use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
+use RCS\Cache\DataCache;
+use RCS\Logging\Timer;
+use RCS\Logging\TimerInterface;
+use RCS\WP\Database\DatabaseUpdater;
+use RCS\WP\Shortcodes\EmailShortCode;
+use RCS\WP\Shortcodes\UsernameShortCode;
+use RCS\WP\ShortURL\ShortUrlOptionsTab;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\PersistingStoreInterface;
+use Symfony\Component\Lock\Store\StoreFactory;
+
+/*
+ * Try to force loading the interface from our vendor folder to avoid a
+ * confict with an older version in the voting plugin.
+ */
+
+class_exists(ContainerInterface::class);    // @phpstan-ignore function.impossibleType
 
 /**
  * The core plugin class.
@@ -17,9 +36,11 @@ use RCS\Logging\LastErrorLogger;
 abstract class WordPressPlugin
 {
     public const REQUEST_ID = 'RainCityRequestId';
+    public const PLUGIN_ENTRYPOINT = 'plugin.entryPoint';
 
-    private const DEFAULT_PLUGIN_VERSION = '1.0.0';
-    private const DB_UPGRADE_ACTIVE_FLAG = 'raincity_wpf_dbUpgradeActive';
+
+    //    private const DEFAULT_PLUGIN_VERSION = '1.0.0';
+//    private const DB_UPGRADE_ACTIVE_FLAG = 'raincity_wpf_dbUpgradeActive';
 
     const DATABASE_VERSIONS_OPTIONS_NAME = 'raincity_wpf_database_versions';
 
@@ -29,42 +50,57 @@ abstract class WordPressPlugin
 
     const ON_REGISTER_SHORTCODE_ACTION = 'raincity_wpf_register_shortcode_action';
 
-
-    // protected string $pluginName;
-    // protected string $pluginVersion;
-    // protected string $pluginSlug;
-    // protected string $mainPluginFilename;
-    // protected string $basePluginUrl;
-
-    protected PluginInfo $pluginInfo;
-
+    protected ContainerInterface $container;
 
     /**
+     * Kick start a plugin.
      *
-     * @var string Version of the database. Used to detect when updates are
-     *             needed to the database.
+     * @param string    $pluginClass    The fully qualified name of the plugin class.
+     * @param string    $entryPointFile The entrypoint file for the class.
+     *
+     * @return object   An instance of the plugin class.
      */
-    private string $databaseVersion;
+    public static function kickstart(string $pluginClass, string $entryPointFile): object
+    {
+        if (defined('ABSPATH')) { // Wrap in case we get invoked via unit testing
+            require_once ABSPATH . '/wp-admin/includes/plugin.php';
+        }
+
+        if (is_subclass_of($pluginClass, WordPressPlugin::class)) {
+            $plugin = new $pluginClass($entryPointFile);
+        } else {
+            $plugin = null;
+        }
+
+        return $plugin;
+    }
 
 
-    public function __construct(
+    private function __construct(
         string $entryPointFile
     ) {
-        $this->pluginInfo = new PluginInfo($entryPointFile);
+        $this->container = $this->privInitializeContainer($entryPointFile);
 
-        // if (isset($args[0])) {
-        //     $pluginData = $args[0];
-        //     $this->pluginName = $pluginData['Name'];
-        //     $this->pluginVersion = $pluginData['Version'];
-        //     $this->pluginSlug = $pluginData['TextDomain'];
+        $this->privInitialize($this->container);
+    }
 
-        //     $pluginInfo = PluginInformation::getPluginInfoByPluginName($this->pluginName);
-        //     $this->mainPluginFilename = $pluginInfo->getPluginFile();
-        //     $this->basePluginUrl = plugin_dir_url($this->mainPluginFilename);
-        // }
+    /**
+     * Classes should override this function to performan any initialization
+     * needed at the time of instantiation.
+     * 
+     * @return void
+     */
+    protected function initialize(ContainerInterface $container): void
+    {
+    }
 
-        $this->setupActions();
-
+    /**
+     * Perform any initialization needed at the time of instantiation.
+     * 
+     * @return void
+     */
+    private function privInitialize(ContainerInterface $container): void
+    {
         /**
          * Hook to load a plugin specific functions.php from the plugin's
          * write folder, if it exists, after the theme has been loaded. The
@@ -76,9 +112,9 @@ abstract class WordPressPlugin
          */
         add_action(
             'after_setup_theme',
-            null,
-            function () {
-                $functionsPhp = $this->pluginInfo->getWriteDir() . '/functions.php';
+            function () use ($container): void {
+                $pluginInfo = $container->get(PluginInfoInterface::class);
+                $functionsPhp = $pluginInfo->getWriteDir() . '/functions.php';
 
                 if (file_exists($functionsPhp)) {
                     require_once $functionsPhp;
@@ -87,14 +123,9 @@ abstract class WordPressPlugin
             100
         );
 
-        // delay running database upgrades until WordPress is initialized
-        add_action('init', [$this, 'privUpgradeDatabase'], 50);
-        add_Action('init', [$this, 'fireRegisterShortCodeAction']);
-
         // Action to generate a unique requestID for each request, used in logging
         add_action(
             'init',
-            null,
             function () {
                 putenv(self::REQUEST_ID . '=' . uniqid('req'));
             },
@@ -108,11 +139,96 @@ abstract class WordPressPlugin
         // Enable application passwords for development environments
         add_filter(
             'wp_is_application_passwords_available',
-            null,
             function ($isAvailable) {
                 return 'development' === wp_get_environment_type() || $isAvailable;
             }
         );
+
+        // Add actions to plugin activation and deactivation hooks
+        // register_activation_hook($this->mainPluginFilename, array($this, 'activate_plugin'));
+        // register_deactivation_hook($this->mainPluginFilename, array($this, 'deactivate_plugin'));
+        // register_uninstall_hook($this->mainPluginFilename, array(get_class($this), 'uninstall_plugin'));
+
+        add_filter('plugin_action_links', [$this, 'addPluginActionLinks'], 10, 4);
+
+        $this->initialize($container);
+    }
+
+    /**
+     * Initialize the Dependency Injection container.
+     * 
+     * Called in the context of the WordPress 'init' hook.
+     * 
+     * @param string $entryPointFile
+     * 
+     * @return ContainerInterface
+     */
+    private function privInitializeContainer(string $entryPointFile): ContainerInterface
+    {
+        if (!function_exists('get_home_path')) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+        }
+
+        $containerProps = [
+            self::PLUGIN_ENTRYPOINT => $entryPointFile,
+        ];
+
+        $containerBuilder = new ContainerBuilder();
+        $containerBuilder->addDefinitions($containerProps);
+        $containerBuilder->addDefinitions(self::getDefinitions());
+
+        // 20260317 - stop using compiled container as it misses providing some parameters to objects
+        //         if (!file_exists(get_home_path() . 'wp-config-local.php')) {
+        //             $containerBuilder->enableCompilation(self::getCompiledContainerPath($entryPointFile));
+        //         }
+
+        $container = $containerBuilder->build();
+
+        $this->loadContainerClasses(
+            $container,
+            [
+                RedirectionManager::class,
+                LastLoginManager::class,
+            ]
+        );
+
+        if (is_admin()) {
+            $this->loadContainerClasses(
+                $container,
+                [
+                    AjaxCacheHelper::class,
+                ]
+            );
+        }
+
+        /** @var ShortcodeProxy $scProxy */
+        $scProxy = $container->get(ShortcodeProxy::class);
+        $scProxy->addShortcodes([
+            EmailShortCode::class,
+            UsernameShortCode::class,
+        ]);
+
+        /** @var AjaxHandlerProxy $ahProxy */
+        $ahProxy = $container->get(AjaxHandlerProxy::class);
+        $ahProxy->addHandlers([
+            AjaxCacheHelper::class,
+        ]);
+
+        return $container;
+    }
+
+    /**
+     * Loads the provided set of classes from the container so they can hook
+     * into WordPress as needed.
+     *
+     * @param ContainerInterface $container
+     * @param string[] $classes
+     */
+    protected function loadContainerClasses(ContainerInterface $container, array $classes): void
+    {
+        foreach ($classes as $class) {
+            $container->get($class);
+        }
     }
 
     /**
@@ -173,122 +289,6 @@ abstract class WordPressPlugin
         return str_replace('<script', join(' ', $replacements), $tag);
     }
 
-
-    /**
-     * Trigger any database upgrades. Hooked via the 'init' action.
-     *
-     * @throws \Exception
-     */
-    public function privUpgradeDatabase(): bool
-    {
-        $dbUpgraded = false;
-        // $dbVersions = get_option(
-        //     WordPressPlugin::DATABASE_VERSIONS_OPTIONS_NAME,
-        //     array($this->pluginInfo->getSlug() => self::DEFAULT_PLUGIN_VERSION)
-        // );
-
-        // /*
-        //  * If the version is the default, assume this is the first time this
-        //  * code has run since installation in which case the database would
-        //  * be new and insync with the current plugin version.
-        //  */
-        // if (self::DEFAULT_PLUGIN_VERSION === ($dbVersions[$this->pluginInfo->getSlug()] ?? self::DEFAULT_PLUGIN_VERSION)) {
-        //     $dbVersions[$this->pluginInfo->getSlug()] = $this->pluginInfo->getVersion();
-        //     update_option(WordPressPlugin::DATABASE_VERSIONS_OPTIONS_NAME, $dbVersions);
-        // } else {
-        //     $this->databaseVersion = $dbVersions[$this->pluginInfo->getSlug()];
-
-        //     // Check if the plugin version is later than the database version
-        //     // Note: Just because the plugin has been updated, it doesn't
-        //     //      mean there are upgrades to be performed.
-        //     if ($this->doDatabaseUpgrade($this->pluginInfo->getVersion())) {
-        //         try {
-        //             /*
-        //              * It's possible for the database upgrade process to trigger
-        //              * additional requests (ajax) into WordPress. To ensure the upgrade
-        //              * is only performed once we wrap it with a transient flag.
-        //              */
-        //             if (false === get_transient(self::DB_UPGRADE_ACTIVE_FLAG)) {
-        //                 set_transient(self::DB_UPGRADE_ACTIVE_FLAG, true, 5 * MINUTE_IN_SECONDS);
-
-        //                 $dbUpgraded |= $this->doDbUpgrades($this->getDatabaseUpgrades(), $dbVersions);
-
-        //                 // Save that the database is up to date with the current plugin version
-        //                 $dbVersions[$this->pluginInfo->getSlug()] = $this->pluginInfo->getVersion();
-        //                 update_option(WordPressPlugin::DATABASE_VERSIONS_OPTIONS_NAME, $dbVersions);
-        //             }
-        //         } finally {
-        //             delete_transient(self::DB_UPGRADE_ACTIVE_FLAG);
-        //         }
-        //     }
-        // }
-
-        return $dbUpgraded;
-    }
-
-    /**
-     *
-     * @param array<string, callable> $upgrades
-     * @param array<string, string> $dbVersions
-     * @return bool
-     */
-    private function doDbUpgrades(array $upgrades, array &$dbVersions): bool
-    {
-        $dbUpgraded = false;
-
-        //         uksort($upgrades, 'version_compare');
-
-        //         foreach ($upgrades as $version => $upgradeFunc) {
-//             if ($this->doDatabaseUpgrade($version)) {
-//                 //                if (is_callable($upgradeFunc)) {
-//                 call_user_func($upgradeFunc);
-//                 //                 } else {
-// //                     throw new \Exception("Unable to call database upgrade function for version {$version}"); // NOSONAR
-// //                 }
-
-        //                 $this->logger->debug("Upgraded database to $version");
-//                 // As we've done an upgrade, note it
-//                 $dbUpgraded = true;
-//                 $this->databaseVersion = $version;
-
-        //                 // Save that update to this version is complete
-//                 $dbVersions[$this->pluginInfo->getSlug()] = $version;
-//                 update_option(WordPressPlugin::DATABASE_VERSIONS_OPTIONS_NAME, $dbVersions);
-//             }
-//         }
-
-        return $dbUpgraded;
-    }
-
-    /**
-     * Check if the database needs to be upgraded to the specified version.
-     *
-     * @param string $version The version number to check
-     *
-     * @return bool Returns true if the database upgrade should be performed.
-     *      Otherwise returns false.
-     */
-    private function doDatabaseUpgrade(string $version): bool
-    {
-        return version_compare($this->databaseVersion, $version) == -1;
-    }
-
-
-    /**
-     * Setup the default hooks and actions
-     *
-     * @access protected
-     */
-    protected function setupActions(): void
-    {
-        // Add actions to plugin activation and deactivation hooks
-        // register_activation_hook($this->mainPluginFilename, array($this, 'activate_plugin'));
-        // register_deactivation_hook($this->mainPluginFilename, array($this, 'deactivate_plugin'));
-        // register_uninstall_hook($this->mainPluginFilename, array(get_class($this), 'uninstall_plugin'));
-
-        add_filter('plugin_action_links', [$this, 'addPluginActionLinks'], 10, 4);
-    }
-
     /**
      * Hook for the 'plugin_action_links' filter.
      *
@@ -305,7 +305,7 @@ abstract class WordPressPlugin
         ?array $pluginData,
         string $context
     ): array {
-        if ($pluginFile == $this->pluginInfo->getEntryPointFile()) {
+        if ($pluginFile == $this->container->get(PluginInfoInterface::class)->getEntryPointFile()) {
             $settingsSlug = $this->getSettingsPageSlug();
 
             if (isset($settingsSlug)) {
@@ -405,7 +405,7 @@ abstract class WordPressPlugin
      *
      * @since    1.0.0
      * @param   AdminHelperInf   $adminInst Reference to a class implementing the Admin_Helper_Inf interface.
-    //  */
+     */
     // public function register_admin_helper(AdminHelperInf $adminInst): void
     // {
     //     if (is_admin()) {
@@ -417,45 +417,6 @@ abstract class WordPressPlugin
     // }
 
 
-    /**
-     * Kick start a plugin.
-     *
-     * @param string    $pluginClass    The fully qualified name of the plugin class.
-     * @param string    $entryPointFile The entrypoint file for the class.
-     *
-     * @return object   An instance of the plugin class.
-     */
-    public static function kickstart(string $pluginClass, string $entryPointFile): object
-    {
-        if (defined('ABSPATH')) { // Wrap in case we get invoked via unit testing
-            require_once ABSPATH . '/wp-admin/includes/plugin.php';
-        }
-
-        if ($pluginClass === WordPressPlugin::class) {
-            $plugin = new $pluginClass($entryPointFile);
-        } else {
-            $plugin = null;
-        }
-
-        return $plugin;
-
-        //        Logger::setLogger(WordPressLogger::class);
-
-        $pluginData = get_plugin_data($entryPointFile, false, false);
-
-        // static $shutdownFunctionRegistered = false;
-
-        // if (!$shutdownFunctionRegistered) {
-        //     $shutdownFunctionRegistered = true;
-        //     $pluginSlug = $pluginData['TextDomain'];
-
-        //     register_shutdown_function(function () use ($pluginSlug) {
-        //         self::shutdownFunction($pluginSlug);
-        //     });
-        // }
-
-        //        return forward_static_call(array($pluginClass, 'instance'), $pluginData);
-    }
 
     // private static function shutdownFunction(string $pluginSlug): void
     // {
@@ -496,4 +457,56 @@ abstract class WordPressPlugin
     //         }
     //     }
     // }
+
+    /**
+     * 
+     * 
+     * @return array<string,mixed>
+     */
+    private static function getDefinitions(): array
+    {
+        return [
+            // DSN for Symfony/LockFactory
+            'lock.dsn' => fn() => $_ENV['LOCK_DSN'] ?? 'memcached://127.0.0.1:11211',
+
+            PersistingStoreInterface::class => function (ContainerInterface $c): PersistingStoreInterface {
+                return StoreFactory::createStore($c->get('lock.dsn'));
+            },
+
+            PluginInfoInterface::class => \DI\create(PluginInfo::class)
+                ->constructor(\DI\get(self::PLUGIN_ENTRYPOINT)),
+
+            LoggerInterface::class => \DI\autowire(PluginLogger::class),
+            \Psr\SimpleCache\CacheInterface::class => \DI\autowire(DataCache::class),
+            TimerInterface::class => \DI\autowire(Timer::class),
+
+            LockFactory::class => \DI\autowire(),
+                // LockFactory::class => function (ContainerInterface $c): LockFactory {
+                //     $factory = new LockFactory($c->get(PersistingStoreInterface::class));
+                //     $factory->setLogger($c->get(LoggerInterface::class));
+
+                //     return $factory;
+                //     },
+
+            ShortcodeProxy::class => \DI\autowire(),
+            AjaxHandlerProxy::class => \DI\autowire(),
+            AjaxCacheHelper::class => \DI\autowire(),
+
+            \Psr\Http\Client\ClientInterface::class => \DI\autowire(\GuzzleHttp\Client::class),
+
+            DatabaseUpdater::class => \DI\autowire(),
+
+            LastLoginManager::class => \DI\autowire(),
+            RedirectionManager::class => \DI\autowire(),
+
+                /**
+                 * Shortcodes
+                 */
+
+                /**
+                 * Administration classes
+                 */
+            ShortUrlOptionsTab::class => \DI\autowire(),
+        ];
+    }
 }
