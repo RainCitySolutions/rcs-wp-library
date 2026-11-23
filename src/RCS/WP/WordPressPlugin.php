@@ -40,17 +40,9 @@ abstract class WordPressPlugin
     public const REQUEST_ID = 'RainCityRequestId';
     public const PLUGIN_ENTRYPOINT = 'plugin.entryPoint';
 
-
-    //    private const DEFAULT_PLUGIN_VERSION = '1.0.0';
-    //    private const DB_UPGRADE_ACTIVE_FLAG = 'raincity_wpf_dbUpgradeActive';
-
-    const DATABASE_VERSIONS_OPTIONS_NAME = 'raincity_wpf_database_versions';
-
-    const ON_PLUGIN_ACTIVATION_ACTION = 'raincity_wpf_plugin_activation_action';
-    const ON_PLUGIN_DEACTIVATION_ACTION = 'raincity_wpf_plugin_deactivation_action';
-    const ON_PLUGIN_UNINSTALL_ACTION = 'raincity_wpf_plugin_uninstall_action';
-
-    const ON_REGISTER_SHORTCODE_ACTION = 'raincity_wpf_register_shortcode_action';
+    const ON_PLUGIN_ACTIVATION_ACTION = 'rcs_wp_lib_plugin_activation_action';
+    const ON_PLUGIN_DEACTIVATION_ACTION = 'rcs_up_lib_plugin_deactivation_action';
+    const ON_PLUGIN_UNINSTALL_ACTION = 'rcs_wp_lib_plugin_uninstall_action';
 
     protected readonly PluginInfoInterface $pluginInfo;
     protected ContainerInterface $container;
