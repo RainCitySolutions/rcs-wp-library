@@ -42,15 +42,16 @@ class DatabaseUpdater
      */
     public function upgradeDatabase(): void
     {
-        $this->dbVersion = $this->options->getValue(self::DATABASE_VERSION);
+        $dbVersion = $this->options->getValue(self::DATABASE_VERSION);
 
         /*
          * If the version is the default, assume this is the first time this
          * code has run since installation in which case the database would
          * be new and insync with the current plugin version.
          */
-        if (empty($this->dbVersion)) {
+        if (empty($dbVersion)) {
             $this->options->setValue(self::DATABASE_VERSION, $this->pluginInfo->getVersion());
+            $this->options->save();
         } else {
             $lock = $this->lockFactory->createLock(DatabaseUpdater::class, 60.0);
 
@@ -58,6 +59,8 @@ class DatabaseUpdater
                 $lock->acquire(true);
 
                 try {
+                    $this->dbVersion = $this->options->getValue(self::DATABASE_VERSION);
+
                     // Check if the plugin version is later than the database version
                     // Note: Just because the plugin has been updated, it doesn't
                     //      mean there are upgrades to be performed.
@@ -68,6 +71,7 @@ class DatabaseUpdater
 
                         // Save that the database is up to date with the current plugin version
                         $this->options->setValue(self::DATABASE_VERSION, $this->pluginInfo->getVersion());
+                        $this->options->save();
 
                         $this->logger->info('Finished db upgrades');
 
