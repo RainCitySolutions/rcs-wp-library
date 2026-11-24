@@ -150,6 +150,10 @@ final class DatabaseUpdaterTest extends TestCase
             ->method('setValue')
             ->with(DatabaseUpdater::DATABASE_VERSION, '2.0.0');
 
+        $this->options
+            ->expects(self::once())
+            ->method('save');
+
         // No lock is needed for a fresh install
         $this->lockFactory->expects(self::never())->method('createLock');
         $this->dbUpdates->expects(self::never())->method('getDatabaseUpgrades');
@@ -190,6 +194,10 @@ final class DatabaseUpdaterTest extends TestCase
 
                 return true;
             });
+
+        $this->options
+            ->expects(self::once())
+            ->method('save');
 
         $this->bgProcess->expects(self::once())->method('dispatch');
 
@@ -281,6 +289,10 @@ final class DatabaseUpdaterTest extends TestCase
             ->method('setValue')
             ->with(DatabaseUpdater::DATABASE_VERSION, '2.0.0');
 
+        $this->options
+            ->expects(self::once())
+            ->method('save');
+
         $this->bgProcess->expects(self::once())->method('dispatch');
 
         $this->createUpdater()->upgradeDatabase();
@@ -300,6 +312,7 @@ final class DatabaseUpdaterTest extends TestCase
 
         $this->dbUpdates->expects(self::never())->method('getDatabaseUpgrades');
         $this->options->expects(self::never())->method('setValue');
+        $this->options->expects(self::never())->method('save');
         $this->bgProcess->expects(self::never())->method('dispatch');
 
         $this->createUpdater()->upgradeDatabase();
@@ -328,6 +341,7 @@ final class DatabaseUpdaterTest extends TestCase
 
         $this->dbUpdates->expects(self::never())->method('getDatabaseUpgrades');
         $this->options->expects(self::never())->method('setValue');
+        $this->options->expects(self::never())->method('save');
         $this->bgProcess->expects(self::never())->method('dispatch');
 
         $this->createUpdater()->upgradeDatabase();
@@ -356,6 +370,7 @@ final class DatabaseUpdaterTest extends TestCase
         $this->expectLock();
 
         $this->options->expects(self::never())->method('setValue');
+        $this->options->expects(self::never())->method('save');
         $this->bgProcess->expects(self::never())->method('dispatch');
 
         $this->expectException(\RuntimeException::class);
