@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace RCS\Logging;
 
 use Psr\Log\LoggerInterface;
@@ -21,7 +23,8 @@ use Psr\Log\LoggerInterface;
  * execution time.
  *
  */
-class ScopeTimer {
+class ScopeTimer
+{
     /**
      * Log a timer message when the instance goes out of scope.
      *
@@ -36,14 +39,14 @@ class ScopeTimer {
         protected readonly LoggerInterface $logger,
         private readonly string $msg,
         protected ?TimerInterface $timer = null
-        )
-    {
+    ) {
         $this->timer ??= new Timer();
 
         $this->timer->start();
     }
 
-    public function __destruct() {
+    public function __destruct()
+    {
         $timeStr = $this->timer->getTime();
 
         $this->logger->debug(sprintf($this->msg, $timeStr));
