@@ -93,7 +93,10 @@ abstract class WordPressPlugin
 
                 $this->privInitialize($this->container);
 
-                $this->container->get(DatabaseUpdater::class)->upgradeDatabase();
+                $dbUpdater = $this->container->get(DatabaseUpdater::class);
+                if ($dbUpdater) {
+                    $dbUpdater->upgradeDatabase();
+                }
             }
         );
 
@@ -492,35 +495,21 @@ abstract class WordPressPlugin
             PersistingStoreInterface::class => function (ContainerInterface $c): PersistingStoreInterface {
                 return StoreFactory::createStore($c->get('lock.dsn'));
             },
+            LockFactory::class => \DI\autowire(),
+
+            \Psr\Http\Client\ClientInterface::class => \DI\autowire(\GuzzleHttp\Client::class),
 
             LoggerInterface::class => \DI\autowire(PluginLogger::class),
             \Psr\SimpleCache\CacheInterface::class => \DI\autowire(DataCache::class),
             TimerInterface::class => \DI\autowire(Timer::class),
 
-            LockFactory::class => \DI\autowire(),
-            // LockFactory::class => function (ContainerInterface $c): LockFactory {
-            //     $factory = new LockFactory($c->get(PersistingStoreInterface::class));
-            //     $factory->setLogger($c->get(LoggerInterface::class));
-
-            //     return $factory;
-            //     },
-
             ShortcodeProxy::class => \DI\autowire(),
             AjaxHandlerProxy::class => \DI\autowire(),
             AjaxCacheHelper::class => \DI\autowire(),
 
-            \Psr\Http\Client\ClientInterface::class => \DI\autowire(\GuzzleHttp\Client::class),
-
             LastLoginManager::class => \DI\autowire(),
             RedirectionManager::class => \DI\autowire(),
 
-            /**
-             * Shortcodes
-             */
-
-            /**
-             * Administration classes
-             */
             ShortUrlOptionsTab::class => \DI\autowire(),
 
             LastErrorLogger::class => \DI\autowire(),

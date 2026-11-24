@@ -8,6 +8,9 @@ use RCS\WP\PluginInfoInterface;
 use RCS\WP\BgProcess\BgProcessInterface;
 use Psr\Log\LoggerInterface;
 use RCS\WP\WordPressOptions;
+use Symfony\Component\Lock\Exception\LockAcquiringException;
+use Symfony\Component\Lock\Exception\LockConflictedException;
+use Symfony\Component\Lock\LockFactory;
 
 /**
  * This class handles any updates and/or changes to the database that might
@@ -18,21 +21,17 @@ class DatabaseUpdater
     public const DATABASE_VERSION = 'dbVersion';
 
     private string $dbVersion;
-    private static string $dbUpgradeSemaphoreFile;
 
     public function __construct(
         private PluginInfoInterface $pluginInfo,
         private WordPressOptions $options,
         private BgProcessInterface $bgProcess,
         private DatabaseUpdatesInterface $dbUpdates,
+        private LockFactory $lockFactory,
         private LoggerInterface $logger
     ) {
         if (!$options->isValidKey(self::DATABASE_VERSION)) {
             throw new \InvalidArgumentException('Options class missing ' . self::DATABASE_VERSION . ' option');
-        }
-
-        if (!isset(self::$dbUpgradeSemaphoreFile)) {
-            self::$dbUpgradeSemaphoreFile = get_temp_dir() . $pluginInfo->getSlug() . '_dbUpdateSemaphore.txt';
         }
     }
 
@@ -53,74 +52,38 @@ class DatabaseUpdater
         if (empty($this->dbVersion)) {
             $this->options->setValue(self::DATABASE_VERSION, $this->pluginInfo->getVersion());
         } else {
-            // Check if the plugin version is later than the database version
-            // Note: Just because the plugin has been updated, it doesn't
-            //      mean there are upgrades to be performed.
-            if (
-                $this->isUpgradeNeeded($this->pluginInfo->getVersion()) &&
-                $this->getDbUpgradeSemaphore()
-            ) {
-                $this->logger->info('Running db upgrades');
+            $lock = $this->lockFactory->createLock(DatabaseUpdater::class, 60.0);
+
+            try {
+                $lock->acquire(true);
 
                 try {
-                    $this->doDbUpgrades($this->dbUpdates->getDatabaseUpgrades());
+                    // Check if the plugin version is later than the database version
+                    // Note: Just because the plugin has been updated, it doesn't
+                    //      mean there are upgrades to be performed.
+                    if ($this->isUpgradeNeeded($this->pluginInfo->getVersion())) {
+                        $this->logger->info('Running db upgrades');
 
-                    // Save that the database is up to date with the current plugin version
-                    $this->options->setValue(self::DATABASE_VERSION, $this->pluginInfo->getVersion());
+                        $this->doDbUpgrades($this->dbUpdates->getDatabaseUpgrades());
 
-                    $this->logger->info('Finished db upgrades');
+                        // Save that the database is up to date with the current plugin version
+                        $this->options->setValue(self::DATABASE_VERSION, $this->pluginInfo->getVersion());
+
+                        $this->logger->info('Finished db upgrades');
+
+                        // Dispatch any tasks which may have been created during the upgrades
+                        $this->logger->info('Dispatching background tasks');
+                        $this->bgProcess->dispatch();
+                    }
                 } finally {
-                    $this->releaseDbUpgradeSemaphore();
+                    $lock->release();
                 }
-
-                // Dispatch any tasks which may have been created during the upgrades
-                $this->logger->info('Dispatching background tasks');
-                $this->bgProcess->dispatch();
+            } catch (LockConflictedException $lce) {
+                $this->logger->critical('Unable to obtain lock in DatabaseUpdater: {msg}', ['msg' => $lce->getMessage()]);
+            } catch (LockAcquiringException $lae) {
+                $this->logger->critical('Unable to obtain lock in DatabaseUpdater: {msg}', ['msg' => $lae->getMessage()]);
             }
         }
-    }
-
-    /**
-     * Checks the database upgrade active flag, blocking if it is set until
-     * it is releaseed.
-     *
-     * It's possible for additional/concurrent requests (ajax) into WordPress.
-     * To ensure the upgrade is only performed once we wrap it with a
-     * transient flag.
-     *
-     * @return bool True if the process should continue with the upgrade, or
-     *      false it the process was waiting on another upgrade to complete.
-     */
-    private function getDbUpgradeSemaphore(): bool
-    {
-        $continueWithUpgrade = true;
-
-        if (!file_exists(self::$dbUpgradeSemaphoreFile) || (time() - 60) > filemtime(self::$dbUpgradeSemaphoreFile)) {
-            touch(self::$dbUpgradeSemaphoreFile);
-
-            $this->logger->info('Obtained dbUpgrade semaphore');
-        } else {
-            $this->logger->info('Waiting for dbUpgrade semaphore');
-
-            $retryCnt = 30;
-
-            // If there is an upgrade in progress, sleep until its done
-            while (file_exists(self::$dbUpgradeSemaphoreFile) && $retryCnt > 0) { // @phpstan-ignore booleanAnd.leftAlwaysTrue
-                sleep(2);
-                $retryCnt--;
-            }
-
-            $this->logger->info('Finished waiting for dbUpgrade semaphore');
-
-            $continueWithUpgrade = false;
-        }
-
-        return $continueWithUpgrade;
-    }
-
-    private function releaseDbUpgradeSemaphore(): void
-    {
-        unlink(self::$dbUpgradeSemaphoreFile);
     }
 
     /**
