@@ -1,5 +1,7 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
+
 namespace RCS\WP\Cookies;
 
 use RuntimeException;
@@ -20,6 +22,7 @@ class WordPressCookie
      * Matches the output of hash('sha256', ...): 64 lowercase hex characters.
      */
     private const HASH_PATTERN = '/^[0-9a-f]{64}$/D';
+    public const COOKIE_PREFIX = '_cprn_cookie_';
 
     private string $hashValue;
 
@@ -49,15 +52,13 @@ class WordPressCookie
         string $hashKey,
         private int $lifetime = 86400,
         string $path = '/'
-        )
-    {
+    ) {
         $this->cookieName = $cookieName;
         $this->lifetime = $lifetime;
 
         if (self::isValidHash($_COOKIE[$this->cookieName] ?? null)) {
             $this->hashValue = $_COOKIE[$this->cookieName];
-        }
-        else {
+        } else {
             $file = '';
             $line = 0;
 
@@ -65,8 +66,7 @@ class WordPressCookie
                 $msg = \sprintf('Unable to create cookie, headers already sent, line %d in %s', $line, $file);
                 $this->logger->warning($msg);
                 throw new WordPressCookieException($msg);
-            }
-            else {
+            } else {
                 $this->hashValue = \hash('sha256', $hashKey . '-' . \uniqid());
 
                 \setcookie($this->cookieName, $this->hashValue, \time() + $this->lifetime, $path, '', false, true);
@@ -96,10 +96,22 @@ class WordPressCookie
     {
         $value = null;
 
-        $transient = \get_transient($this->hashValue);
+        /** @var false|CookieObject $entry */
+        $entry = \get_option(self::COOKIE_PREFIX . $this->hashValue);
 
-        if ($transient !== false) {
-            $value = $transient;
+        if (false !== $entry) {
+            if ($entry->hasExpired()) {
+                \delete_option(self::COOKIE_PREFIX . $this->hashValue);
+            } else {
+                $value = $entry->getValue();
+            }
+        } else {
+            // Check for prior storage mechanism
+            $transient = \get_transient($this->hashValue);
+
+            if ($transient !== false) {
+                $value = $transient;
+            }
         }
 
         return $value;
@@ -114,7 +126,9 @@ class WordPressCookie
      */
     public function setCookieValue(mixed $value): bool
     {
-        return \set_transient($this->hashValue, $value, $this->lifetime);
+        $entry = new CookieObject($value, $this->lifetime);
+
+        return \update_option(self::COOKIE_PREFIX . $this->hashValue, $entry, false);
     }
 
     /**
@@ -124,6 +138,7 @@ class WordPressCookie
      */
     public function deleteCookieValue(): void
     {
+        \delete_option(self::COOKIE_PREFIX . $this->hashValue);
         \delete_transient($this->hashValue);
     }
 }
@@ -133,6 +148,4 @@ class WordPressCookie
  * is not currently set (or is invalid) and cannot be set because data has
  * already been sent to the browser.
  */
-class WordPressCookieException extends RuntimeException {
-
-}
+class WordPressCookieException extends RuntimeException {}

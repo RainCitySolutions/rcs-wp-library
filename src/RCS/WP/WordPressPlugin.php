@@ -9,6 +9,7 @@ use RCS\Cache\DataCache;
 use RCS\Logging\LastErrorLogger;
 use RCS\Logging\Timer;
 use RCS\Logging\TimerInterface;
+use RCS\WP\Cookies\CookieCronJob;
 use RCS\WP\Database\DatabaseUpdater;
 use RCS\WP\Shortcodes\EmailShortCode;
 use RCS\WP\Shortcodes\UsernameShortCode;
@@ -204,6 +205,7 @@ abstract class WordPressPlugin
             $container,
             [
                 LastErrorLogger::class,
+                CookieCronJob::class,
             ]
         );
 

@@ -1,32 +1,42 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
 
 namespace RCS\WP\Cookies\Tests;
 
 use Brain\Monkey;
 use Brain\Monkey\Functions;
+use Mockery;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use RCS\WP\Cookies\CookieObject;
 use RCS\WP\Cookies\WordPressCookie;
 use RCS\WP\Cookies\WordPressCookieException;
 use RuntimeException;
 
 /*
  * WordPressCookie calls every function fully qualified, so the tests use
- * Brain Monkey (built on Patchwork) to stub both the WordPress transient
- * functions and the PHP internals. The internals must be listed under
- * "redefinable-internals" in patchwork.json.
+ * Brain Monkey (built on Patchwork) to stub both the WordPress option and
+ * transient functions and the PHP internals. The internals must be listed
+ * under "redefinable-internals" in patchwork.json.
+ *
+ * Values are stored as CookieObject instances in WordPress options. The
+ * transient functions are only used to read (and delete) values written by
+ * the prior storage mechanism.
  *
  * Limitation: Patchwork passes arguments by value, so the by-reference
  * $file/$line arguments of headers_sent() can't be populated. The class sees
  * '' and 0 for them, so tests match the message format rather than values.
  */
+
 #[CoversClass(WordPressCookie::class)]
 #[CoversClass(WordPressCookieException::class)]
+#[UsesClass(CookieObject::class)]
 final class WordPressCookieTest extends TestCase
 {
     use MockeryPHPUnitIntegration;
@@ -34,6 +44,7 @@ final class WordPressCookieTest extends TestCase
     private const COOKIE_NAME = 'my_cookie';
     private const HASH_KEY = 'secret-key';
     private const EXISTING_HASH = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    private const OPTION_PREFIX = '_cprn_cookie_';
     private const HEADERS_SENT_MESSAGE = '/^Unable to create cookie, headers already sent, line \d+ in /';
 
     private LoggerInterface&MockObject $logger;
@@ -73,6 +84,11 @@ final class WordPressCookieTest extends TestCase
         return hash('sha256', self::HASH_KEY . '-' . $uniqid);
     }
 
+    private static function optionKey(string $hash): string
+    {
+        return self::OPTION_PREFIX . $hash;
+    }
+
     /** Stubs headers_sent() (the new-cookie path asks it). */
     private function headersSent(bool $sent): void
     {
@@ -92,6 +108,50 @@ final class WordPressCookieTest extends TestCase
             return true;
         });
         return $calls;
+    }
+
+    /**
+     * Stubs the option functions with an in-memory store and returns a
+     * reference to it. A missing option reads as false, as in WordPress.
+     *
+     * @return array<string, mixed>
+     */
+    private function &fakeOptions(): array
+    {
+        /** @var array<string, mixed> $store */
+        $store = [];
+        Functions\when('update_option')->alias(static function (string $k, mixed $v) use (&$store): bool {
+            $store[$k] = $v;
+            return true;
+        });
+        Functions\when('get_option')->alias(static function (string $k) use (&$store): mixed {
+            return $store[$k] ?? false;
+        });
+        Functions\when('delete_option')->alias(static function (string $k) use (&$store): bool {
+            unset($store[$k]);
+            return true;
+        });
+        return $store;
+    }
+
+    /**
+     * Stubs the transient functions with an in-memory store (the prior
+     * storage mechanism) and returns a reference to it.
+     *
+     * @return array<string, mixed>
+     */
+    private function &fakeTransients(): array
+    {
+        /** @var array<string, mixed> $store */
+        $store = [];
+        Functions\when('get_transient')->alias(static function (string $k) use (&$store): mixed {
+            return $store[$k] ?? false;
+        });
+        Functions\when('delete_transient')->alias(static function (string $k) use (&$store): bool {
+            unset($store[$k]);
+            return true;
+        });
+        return $store;
     }
 
     // ---------------------------------------------------------------
@@ -114,9 +174,13 @@ final class WordPressCookieTest extends TestCase
         $this->withExistingCookie();
     }
 
-    public function testExistingCookieValueIsUsedAsTransientKey(): void
+    public function testExistingCookieValueIsUsedAsOptionKey(): void
     {
-        Functions\expect('get_transient')->once()->with(self::EXISTING_HASH)->andReturn('stored');
+        Functions\expect('get_option')
+            ->once()
+            ->with(self::optionKey(self::EXISTING_HASH))
+            ->andReturn(new CookieObject('stored', 3600));
+        Functions\expect('get_transient')->never();
 
         $this->assertSame('stored', $this->withExistingCookie()->getCookieValue());
     }
@@ -126,8 +190,7 @@ final class WordPressCookieTest extends TestCase
     // ---------------------------------------------------------------
 
     /**
-     * 
-     * @return array<string,mixed>
+     * @return array<string, array<int, mixed>>
      */
     public static function invalidCookieValuesProvider(): array
     {
@@ -154,6 +217,7 @@ final class WordPressCookieTest extends TestCase
     {
         $_COOKIE[self::COOKIE_NAME] = $invalid;
         $expectedHash = self::hashFor('fresh');
+        $expectedKey = self::optionKey($expectedHash);
 
         $this->headersSent(false);
         Functions\when('uniqid')->justReturn('fresh');
@@ -163,9 +227,14 @@ final class WordPressCookieTest extends TestCase
             ->with(self::COOKIE_NAME, $expectedHash, 1_000 + 86400, '/', '', false, true)
             ->andReturn(true);
 
-        // The invalid client value must never be used as a transient key.
+        // The invalid client value must never be used as an option or transient key.
+        Functions\expect('get_option')->once()->with($expectedKey)->andReturn(false);
         Functions\expect('get_transient')->once()->with($expectedHash)->andReturn(false);
-        Functions\expect('set_transient')->once()->with($expectedHash, 'x', 86400)->andReturn(true);
+        Functions\expect('update_option')
+            ->once()
+            ->with($expectedKey, Mockery::type(CookieObject::class), false)
+            ->andReturn(true);
+        Functions\expect('delete_option')->once()->with($expectedKey);
         Functions\expect('delete_transient')->once()->with($expectedHash);
 
         $cookie = $this->makeCookie();
@@ -193,7 +262,10 @@ final class WordPressCookieTest extends TestCase
         $_COOKIE[self::COOKIE_NAME] = $hash;
 
         Functions\expect('setcookie')->never();
-        Functions\expect('set_transient')->once()->with($hash, 'v', 86400)->andReturn(true);
+        Functions\expect('update_option')
+            ->once()
+            ->with(self::optionKey($hash), Mockery::type(CookieObject::class), false)
+            ->andReturn(true);
 
         $this->makeCookie()->setCookieValue('v');
     }
@@ -323,14 +395,13 @@ final class WordPressCookieTest extends TestCase
         $this->logger->expects($this->once())
             ->method('warning')
             ->with($this->callback(
-                static fn (string $msg): bool => preg_match(self::HEADERS_SENT_MESSAGE, $msg) === 1
+                static fn(string $msg): bool => preg_match(self::HEADERS_SENT_MESSAGE, $msg) === 1
             ));
 
         try {
             $this->makeCookie();
             $this->fail('Expected WordPressCookieException');
-        }
-        catch (WordPressCookieException) {
+        } catch (WordPressCookieException) {
             // expected
         }
     }
@@ -342,8 +413,7 @@ final class WordPressCookieTest extends TestCase
 
         try {
             $this->makeCookie();
-        }
-        catch (WordPressCookieException) {
+        } catch (WordPressCookieException) {
             // expected
         }
     }
@@ -357,17 +427,17 @@ final class WordPressCookieTest extends TestCase
     // getCookieValue()
     // ---------------------------------------------------------------
 
-    public function testGetCookieValueReturnsNullWhenNoTransient(): void
+    public function testGetCookieValueReturnsNullWhenNothingStored(): void
     {
-        // WordPress returns false for a missing/expired transient.
+        // WordPress returns false for a missing option and a missing/expired transient.
+        Functions\expect('get_option')->once()->with(self::optionKey(self::EXISTING_HASH))->andReturn(false);
         Functions\expect('get_transient')->once()->with(self::EXISTING_HASH)->andReturn(false);
 
         $this->assertNull($this->withExistingCookie()->getCookieValue());
     }
 
     /**
-     * 
-     * @return array<string,mixed>
+     * @return array<string, array<int, mixed>>
      */
     public static function storedValuesProvider(): array
     {
@@ -378,6 +448,7 @@ final class WordPressCookieTest extends TestCase
             'empty string'  => [''],
             'null'          => [null],
             'true'          => [true],
+            'false'         => [false],
             'empty array'   => [[]],
             'array'         => [['a' => 1, 'b' => [2, 3]]],
             'object'        => [(object) ['x' => 'y']],
@@ -385,19 +456,78 @@ final class WordPressCookieTest extends TestCase
     }
 
     #[DataProvider('storedValuesProvider')]
-    public function testGetCookieValueReturnsStoredValue(mixed $value): void
+    public function testGetCookieValueReturnsValueFromOption(mixed $value): void
     {
-        Functions\expect('get_transient')->once()->with(self::EXISTING_HASH)->andReturn($value);
+        Functions\expect('get_option')
+            ->once()
+            ->with(self::optionKey(self::EXISTING_HASH))
+            ->andReturn(new CookieObject($value, 3600));
+        Functions\expect('delete_option')->never();
+        // A stored entry is authoritative, even when its value is null or false.
+        Functions\expect('get_transient')->never();
 
         $this->assertEquals($value, $this->withExistingCookie()->getCookieValue());
     }
 
+    public function testGetCookieValueReturnsNullAndDeletesOptionWhenExpired(): void
+    {
+        $key = self::optionKey(self::EXISTING_HASH);
+
+        Functions\expect('get_option')->once()->with($key)->andReturn(new CookieObject('old', -10));
+        Functions\expect('delete_option')->once()->with($key);
+        // An expired entry must not fall back to the prior storage mechanism.
+        Functions\expect('get_transient')->never();
+
+        $this->assertNull($this->withExistingCookie()->getCookieValue());
+    }
+
+    public function testGetCookieValueDoesNotDeleteUnexpiredOption(): void
+    {
+        Functions\when('get_option')->justReturn(new CookieObject('fresh', 3600));
+        Functions\expect('delete_option')->never();
+
+        $this->assertSame('fresh', $this->withExistingCookie()->getCookieValue());
+    }
+
+    public function testGetCookieValueFallsBackToTransientWhenNoOption(): void
+    {
+        Functions\expect('get_option')->once()->with(self::optionKey(self::EXISTING_HASH))->andReturn(false);
+        Functions\expect('get_transient')->once()->with(self::EXISTING_HASH)->andReturn('legacy');
+
+        $this->assertSame('legacy', $this->withExistingCookie()->getCookieValue());
+    }
+
+    #[DataProvider('storedValuesProvider')]
+    public function testGetCookieValueReturnsLegacyTransientValue(mixed $value): void
+    {
+        Functions\when('get_option')->justReturn(false);
+        Functions\expect('get_transient')->once()->with(self::EXISTING_HASH)->andReturn($value);
+
+        // A legacy transient of false is indistinguishable from "missing", so it reads as null.
+        $expected = $value === false ? null : $value;
+
+        $this->assertEquals($expected, $this->withExistingCookie()->getCookieValue());
+    }
+
+    public function testOptionTakesPrecedenceOverLegacyTransient(): void
+    {
+        Functions\when('get_option')->justReturn(new CookieObject('new', 3600));
+        Functions\expect('get_transient')->never();
+
+        $this->assertSame('new', $this->withExistingCookie()->getCookieValue());
+    }
+
     public function testGetCookieValueUsesGeneratedHashForNewCookie(): void
     {
+        $hash = self::hashFor('u1');
+
         $this->headersSent(false);
         Functions\when('uniqid')->justReturn('u1');
         Functions\when('setcookie')->justReturn(true);
-        Functions\expect('get_transient')->once()->with(self::hashFor('u1'))->andReturn('value');
+        Functions\expect('get_option')
+            ->once()
+            ->with(self::optionKey($hash))
+            ->andReturn(new CookieObject('value', 3600));
 
         $this->assertSame('value', $this->makeCookie()->getCookieValue());
     }
@@ -406,42 +536,102 @@ final class WordPressCookieTest extends TestCase
     // setCookieValue()
     // ---------------------------------------------------------------
 
-    public function testSetCookieValueStoresTransientWithHashAndLifetime(): void
+    public function testSetCookieValueStoresCookieObjectUnderPrefixedHashKey(): void
     {
-        Functions\expect('set_transient')
+        $captured = null;
+        Functions\expect('update_option')
             ->once()
-            ->with(self::EXISTING_HASH, ['k' => 'v'], 1800)
-            ->andReturn(true);
+            ->with(self::optionKey(self::EXISTING_HASH), Mockery::type(CookieObject::class), false)
+            ->andReturnUsing(static function (string $k, CookieObject $entry) use (&$captured): bool {
+                $captured = $entry;
+                return true;
+            });
 
-        $_COOKIE[self::COOKIE_NAME] = self::EXISTING_HASH;
-
-        $this->assertTrue($this->makeCookie(1800)->setCookieValue(['k' => 'v']));
+        $this->assertTrue($this->withExistingCookie()->setCookieValue(['k' => 'v']));
+        $this->assertInstanceOf(CookieObject::class, $captured);
+        $this->assertSame(['k' => 'v'], $captured->getValue());
     }
 
-    public function testSetCookieValueUsesDefaultLifetime(): void
+    public function testSetCookieValueDoesNotAutoloadOption(): void
     {
-        Functions\expect('set_transient')->once()->with(self::EXISTING_HASH, 'x', 86400)->andReturn(true);
+        // The third argument ($autoload) must be false so cookie data isn't loaded on every request.
+        Functions\expect('update_option')
+            ->once()
+            ->with(Mockery::any(), Mockery::any(), false)
+            ->andReturn(true);
 
         $this->withExistingCookie()->setCookieValue('x');
     }
 
-    public function testSetCookieValueReturnsFalseWhenTransientFails(): void
+    public function testSetCookieValueDoesNotUseTransients(): void
     {
-        Functions\expect('set_transient')->once()->andReturn(false);
+        Functions\when('update_option')->justReturn(true);
+        Functions\expect('set_transient')->never();
+
+        $this->withExistingCookie()->setCookieValue('x');
+    }
+
+    public function testStoredEntryExpiresAfterConfiguredLifetime(): void
+    {
+        $now = 1_000;
+        Functions\when('time')->alias(static function () use (&$now): int {
+            return $now;
+        });
+
+        $captured = null;
+        Functions\when('update_option')->alias(
+            static function (string $k, CookieObject $entry) use (&$captured): bool {
+                $captured = $entry;
+                return true;
+            }
+        );
+
+        $_COOKIE[self::COOKIE_NAME] = self::EXISTING_HASH;
+        $this->makeCookie(1800)->setCookieValue('x');
+
+        $this->assertInstanceOf(CookieObject::class, $captured);
+
+        $now = 1_000 + 1800;
+        $this->assertFalse($captured->hasExpired(), 'Not expired at the end of the lifetime');
+
+        $now = 1_000 + 1801;
+        $this->assertTrue($captured->hasExpired(), 'Expired once the lifetime has passed');
+    }
+
+    public function testStoredEntryUsesDefaultLifetime(): void
+    {
+        $now = 1_000;
+        Functions\when('time')->alias(static function () use (&$now): int {
+            return $now;
+        });
+
+        $captured = null;
+        Functions\when('update_option')->alias(
+            static function (string $k, CookieObject $entry) use (&$captured): bool {
+                $captured = $entry;
+                return true;
+            }
+        );
+
+        $this->withExistingCookie()->setCookieValue('x');
+
+        $now = 1_000 + 86400;
+        $this->assertFalse($captured->hasExpired());
+
+        $now = 1_000 + 86401;
+        $this->assertTrue($captured->hasExpired());
+    }
+
+    public function testSetCookieValueReturnsFalseWhenUpdateOptionFails(): void
+    {
+        Functions\expect('update_option')->once()->andReturn(false);
 
         $this->assertFalse($this->withExistingCookie()->setCookieValue('x'));
     }
 
     public function testSetThenGetRoundTrip(): void
     {
-        $store = [];
-        Functions\when('set_transient')->alias(static function (string $k, mixed $v) use (&$store): bool {
-            $store[$k] = $v;
-            return true;
-        });
-        Functions\when('get_transient')->alias(static function (string $k) use (&$store): mixed {
-            return $store[$k] ?? false;
-        });
+        $this->fakeOptions();
 
         $cookie = $this->withExistingCookie();
         $cookie->setCookieValue('round-trip');
@@ -449,12 +639,52 @@ final class WordPressCookieTest extends TestCase
         $this->assertSame('round-trip', $cookie->getCookieValue());
     }
 
+    #[DataProvider('storedValuesProvider')]
+    public function testSetThenGetRoundTripPreservesValue(mixed $value): void
+    {
+        $this->fakeOptions();
+
+        $cookie = $this->withExistingCookie();
+        $cookie->setCookieValue($value);
+
+        $this->assertEquals($value, $cookie->getCookieValue());
+    }
+
+    public function testSetOverwritesPreviousValue(): void
+    {
+        $this->fakeOptions();
+
+        $cookie = $this->withExistingCookie();
+        $cookie->setCookieValue('first');
+        $cookie->setCookieValue('second');
+
+        $this->assertSame('second', $cookie->getCookieValue());
+    }
+
+    public function testCookiesWithDifferentHashesAreIsolated(): void
+    {
+        $store = &$this->fakeOptions();
+
+        $_COOKIE[self::COOKIE_NAME] = self::EXISTING_HASH;
+        $this->makeCookie()->setCookieValue('one');
+
+        $otherHash = str_repeat('b', 64);
+        $_COOKIE[self::COOKIE_NAME] = $otherHash;
+        $other = $this->makeCookie();
+        Functions\when('get_transient')->justReturn(false);
+
+        $this->assertNull($other->getCookieValue());
+        $this->assertArrayHasKey(self::optionKey(self::EXISTING_HASH), $store);
+        $this->assertArrayNotHasKey(self::optionKey($otherHash), $store);
+    }
+
     // ---------------------------------------------------------------
     // deleteCookieValue()
     // ---------------------------------------------------------------
 
-    public function testDeleteCookieValueDeletesTransientByHash(): void
+    public function testDeleteCookieValueDeletesOptionAndLegacyTransient(): void
     {
+        Functions\expect('delete_option')->once()->with(self::optionKey(self::EXISTING_HASH));
         Functions\expect('delete_transient')->once()->with(self::EXISTING_HASH);
 
         $this->withExistingCookie()->deleteCookieValue();
@@ -462,18 +692,8 @@ final class WordPressCookieTest extends TestCase
 
     public function testValueIsGoneAfterDelete(): void
     {
-        $store = [];
-        Functions\when('set_transient')->alias(static function (string $k, mixed $v) use (&$store): bool {
-            $store[$k] = $v;
-            return true;
-        });
-        Functions\when('get_transient')->alias(static function (string $k) use (&$store): mixed {
-            return $store[$k] ?? false;
-        });
-        Functions\when('delete_transient')->alias(static function (string $k) use (&$store): bool {
-            unset($store[$k]);
-            return true;
-        });
+        $this->fakeOptions();
+        $this->fakeTransients();
 
         $cookie = $this->withExistingCookie();
         $cookie->setCookieValue('temp');
@@ -482,9 +702,25 @@ final class WordPressCookieTest extends TestCase
         $this->assertNull($cookie->getCookieValue());
     }
 
+    public function testDeleteRemovesLegacyTransientValue(): void
+    {
+        $this->fakeOptions();
+        $transients = &$this->fakeTransients();
+        $transients[self::EXISTING_HASH] = 'legacy';
+
+        $cookie = $this->withExistingCookie();
+        $this->assertSame('legacy', $cookie->getCookieValue());
+
+        $cookie->deleteCookieValue();
+
+        $this->assertNull($cookie->getCookieValue());
+        $this->assertArrayNotHasKey(self::EXISTING_HASH, $transients);
+    }
+
     public function testDeleteDoesNotTouchHttpCookie(): void
     {
         Functions\expect('setcookie')->never();
+        Functions\when('delete_option')->justReturn(true);
         Functions\when('delete_transient')->justReturn(true);
 
         $this->withExistingCookie()->deleteCookieValue();
