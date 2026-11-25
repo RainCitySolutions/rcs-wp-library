@@ -26,12 +26,11 @@ class CookieCronJob extends CronJob
         global $wpdb;
 
         $prefix = $wpdb->esc_like(WordPressCookie::COOKIE_PREFIX) . '%';
-        $optionNames = $wpdb->get_results(
+        $optionNames = $wpdb->get_col(
             $wpdb->prepare(
                 "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s",
                 $prefix
-            ),
-            ARRAY_A
+            )
         );
 
         foreach ($optionNames as $optionName) {
