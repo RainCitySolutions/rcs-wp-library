@@ -1,5 +1,7 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
+
 namespace RCS\WP\BgProcess;
 
 interface BgProcessInterface
@@ -9,11 +11,22 @@ interface BgProcessInterface
      *
      * @param BgTaskInterface $task
      *
-     * @return $this
+     * @return self
 
      * @see \WP_Background_Process::push_to_queue()
      */
     public function pushToQueue(BgTaskInterface $task): self;
+
+    /**
+     * Add batch of tasks to the queue
+     *
+     * @param BgTaskInterface[] $tasks
+     *
+     * @return $this
+
+     * @see \WP_Background_Process::push_to_queue()
+     */
+    public function pushBatchToQueue(array $tasks): self;
 
     /**
      * @see \WP_Background_Process::push_to_queue()

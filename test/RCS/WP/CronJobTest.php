@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace RCS\WP;
 
 use Brain\Monkey;
@@ -57,17 +59,17 @@ final class CronJobTest extends TestCase
         Functions\expect('add_action')->once()->andReturnUsing(function ($hook, $callback) {
             $callback(); // simulate WP calling the hook
         });
-            Functions\expect('wp_clear_scheduled_hook')->once()->with('oneTimeJob');
-            Functions\expect('wp_get_schedules')->once()->andReturn([
-                CronJob::ONE_TIME_CRONJOB => ['interval' => 60, 'display' => 'One Time']
-            ]);
-            Functions\expect('wp_next_scheduled')->once()->andReturn(false);
-            Functions\expect('wp_schedule_event')->once();
+        Functions\expect('wp_clear_scheduled_hook')->once()->with('oneTimeJob');
+        Functions\expect('wp_get_schedules')->once()->andReturn([
+            CronJob::ONE_TIME_CRONJOB => ['interval' => 60, 'display' => 'One Time']
+        ]);
+        Functions\expect('wp_next_scheduled')->once()->andReturn(false);
+        Functions\expect('wp_schedule_event')->once();
 
-            $cronJob = new TestCronJob($logger);
-            $cronJob->exposeInitialize('oneTimeJob', CronJob::ONE_TIME_CRONJOB);
+        $cronJob = new TestCronJob($logger);
+        $cronJob->exposeInitialize('oneTimeJob', CronJob::ONE_TIME_CRONJOB);
 
-            self::assertTrue($cronJob->runJobCalled);
+        self::assertTrue($cronJob->runJobCalled);
     }
 
     public function testUnsupportedIntervalLogsError(): void
@@ -89,8 +91,7 @@ final class CronJobTest extends TestCase
     {
         $mock = $this->getMockBuilder(TestBackgroundProcess::class)
             ->onlyMethods(['is_active', 'is_process_running'])
-            ->getMock()
-            ;
+            ->getMock();
         $mock->method('is_active')->willReturn(true);
         $mock->method('is_process_running')->willReturn(true);
 
@@ -99,19 +100,24 @@ final class CronJobTest extends TestCase
 }
 
 class TestBackgroundProcess
-    extends \WP_Background_Process
-    implements BgProcessInterface
+extends \WP_Background_Process
+implements BgProcessInterface
 {
-
     public function task($item) {}
 
-    public function pushToQueue(BgTaskInterface $task): self {
+    public function pushBatchToQueue(array $task): self
+    {
+        return $this;
+    }
+
+    public function pushToQueue(BgTaskInterface $task): self
+    {
         return $this;
     }
 }
 
 class TestCronJob
-    extends CronJob
+extends CronJob
 {
     public bool $runJobCalled = false;
 
