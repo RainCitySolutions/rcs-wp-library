@@ -82,7 +82,7 @@ class WordPressCookie
      * entries can also be arrays (e.g. "name[]=x"), so the type is checked
      * before the format.
      */
-    private static function isValidHash(mixed $value): bool
+    public static function isValidHash(mixed $value): bool
     {
         return \is_string($value) && \preg_match(self::HASH_PATTERN, $value) === 1;
     }
