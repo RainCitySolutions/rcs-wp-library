@@ -1,5 +1,7 @@
 <?php
-declare(strict_types = 1);
+
+declare(strict_types=1);
+
 namespace RCS\WP\BgProcess;
 
 use Psr\Log\LoggerInterface;
@@ -38,12 +40,26 @@ class BgProcess extends \WP_Background_Process implements BgProcessInterface
     public function __construct(
         protected LoggerInterface $logger,
         array $params = []
-//         ...$params
-        )
-    {
+    ) {
         parent::__construct();
 
         $this->taskParams = $params;
+    }
+
+    /**
+     * Add a batch of tasks to the queue
+     *
+     * @param BgTaskInterface[] $tasks
+     *
+     * @return self
+     */
+    public function pushBatchToQueue(array $tasks): self
+    {
+        foreach ($tasks as $task) {
+            parent::push_to_queue($task);
+        }
+
+        return parent::save();
     }
 
     /**
@@ -89,7 +105,6 @@ class BgProcess extends \WP_Background_Process implements BgProcessInterface
     {
         $result = $task;
 
-//         if ($task->run($this, $logger, ...$this->taskParams)) {
         if ($task->run($this, $logger, $this->taskParams)) {
             $result = false;
         }
